@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CYT Probe 3</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e8e8; font: 20px/1.35 sans-serif; }
+  body { padding: 40px 60px; }
+  h1 { font-size: 32px; margin: 0 0 16px; color: #cfffcf; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 15px; margin: 0; }
+</style>
+</head>
+<body>
+<h1>Clean Your TV · service bus probe (read-only)</h1>
+<pre id="out">collecting… (about 6 seconds)</pre>
+<script>
+(function () {
+  var r = { page: 'probe3', t: new Date().toString(), src: {}, results: {} };
+
+  // Source of every JavaScript function the TV injects under vowOS (native ones only say [native code]).
+  function sources(obj, prefix, depth) {
+    if (!obj || depth < 0) return;
+    for (var k in obj) {
+      var v; try { v = obj[k]; } catch (e) { continue; }
+      if (typeof v === 'function') r.src[prefix + k] = String(v).slice(0, 5000);
+      else if (v && typeof v === 'object' && k !== 'socket' && k !== 'httpRequest' && k !== 'session_array' && k !== 'msgs') sources(v, prefix + k + '.', depth - 1);
+    }
+  }
+  sources(window.vowOS, 'vowOS.', 2);
+  ['TvInfo_getParam', 'TvInfo_setParam', 'HiUtils_createRequest', 'Hisense_GetVolume', 'Hisense_GetDeviceInfo',
+   'Hisense_RegisterObserver', 'Hisense_LoginWithVIDAA', 'Hisense_SetRemoteKeyboard', 'Hisense_disableVKB'].forEach(function (n) {
+    try { r.src[n] = String(window[n]).slice(0, 3000); } catch (e) {}
+  });
+
+  function report() {
+    try { r.socketState = vowOS.service.socket.readyState; r.socketUrl = vowOS.service.socket.url; } catch (e) { r.socketState = 'err ' + e; }
+    document.getElementById('out').textContent = JSON.stringify(r, null, 1).slice(0, 7000);
+    var x = new XMLHttpRequest();
+    x.open('POST', '/report', true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.send(JSON.stringify(r));
+  }
+
+  // One read: the installed packages, through the store API the TV provides.
+  setTimeout(function () {
+    try {
+      var got = vowOS.store.getInstalledPkgs(function (res) { r.results.installedCallback = String(JSON.stringify(res)).slice(0, 6000); report(); });
+      r.results.installedReturn = String(JSON.stringify(got)).slice(0, 6000);
+    } catch (e) { r.results.installed = 'threw: ' + e; }
+    report();
+  }, 3000);
+  setTimeout(report, 6000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CYT Probe 2</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e8e8; font: 20px/1.35 sans-serif; }
+  body { padding: 40px 60px; }
+  h1 { font-size: 32px; margin: 0 0 16px; color: #cfffcf; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 16px; margin: 0; }
+</style>
+</head>
+<body>
+<h1>Clean Your TV · API probe (read-only)</h1>
+<pre id="out">collecting…</pre>
+<script>
+(function () {
+  var r = { page: 'probe2', t: new Date().toString() };
+
+  // Lists members (names and types) without calling anything, a few levels deep.
+  function members(obj, depth, seen) {
+    if (!obj || (typeof obj !== 'object' && typeof obj !== 'function') || depth < 0) return typeof obj;
+    if (seen.indexOf(obj) >= 0) return '(seen)';
+    seen.push(obj);
+    var out = {}, names = [];
+    try { for (var k in obj) names.push(k); } catch (e) {}
+    try { Object.getOwnPropertyNames(obj).forEach(function (n) { if (names.indexOf(n) < 0) names.push(n); }); } catch (e) {}
+    names.slice(0, 120).forEach(function (n) {
+      var v; try { v = obj[n]; } catch (e) { out[n] = 'err'; return; }
+      out[n] = (v && typeof v === 'object') ? members(v, depth - 1, seen) : (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') ? (typeof v + ':' + String(v).slice(0, 120)) : typeof v;
+    });
+    return out;
+  }
+  // Calls only functions whose names say they read something.
+  function safeCall(name, args) {
+    try {
+      var f = window[name];
+      if (typeof f !== 'function') return 'missing';
+      var v = f.apply(window, args || []);
+      return typeof v === 'string' ? v.slice(0, 4000) : JSON.stringify(v);
+    } catch (e) { return 'threw: ' + e; }
+  }
+
+  r.vowOS = members(window.vowOS, 3, []);
+  r.vowOSContext = members(window.vowOSContext, 1, []);
+  r.Hisense = members(window.Hisense, 2, []);
+  r.omi_platform = members(window.omi_platform, 1, []);
+  r.calls = {
+    getTVProprietaryFunctions: safeCall('getTVProprietaryFunctions'),
+    VOS_GetAppCapability: safeCall('VOS_GetAppCapability'),
+    Hisense_GetApiVersion: safeCall('Hisense_GetApiVersion'),
+    Hisense_GetOSVersion: safeCall('Hisense_GetOSVersion'),
+    Hisense_GetFeatureCode: safeCall('Hisense_GetFeatureCode'),
+    Hisense_GetCapabilityCode: safeCall('Hisense_GetCapabilityCode'),
+    Hisense_GetCurrentBrowser: safeCall('Hisense_GetCurrentBrowser'),
+    appId: (function () { try { return vowOSContext.getAppId(); } catch (e) { return 'threw: ' + e; } })()
+  };
+  r.fnSource = {};
+  ['getTVProprietaryFunctions', 'queryTVProprietaryFunction', 'invokeTVProprietaryFunction', 'setApplicationDestroyed',
+   'CSLaunchCallback', 'VOS_GetAppCapability', 'Hisense_SupportAppConfig', 'HiUtils_createRequest', 'TvInfo_getParam'].forEach(function (n) {
+    try { r.fnSource[n] = String(window[n]).slice(0, 600); } catch (e) { r.fnSource[n] = 'err'; }
+  });
+  try {
+    var am = oipfObjectFactory.createApplicationManagerObject();
+    r.oipfAppManager = members(am, 1, []);
+    var own = am && am.getOwnerApplication && am.getOwnerApplication(document);
+    r.oipfOwnerApp = members(own, 1, []);
+  } catch (e) { r.oipfAppManager = 'threw: ' + e; }
+
+  document.getElementById('out').textContent = JSON.stringify(r, null, 1).slice(0, 6000);
+  var x = new XMLHttpRequest();
+  x.open('POST', '/report', true);
+  x.setRequestHeader('Content-Type', 'application/json');
+  x.send(JSON.stringify(r));
+})();
+</script>
+</body>
+</html>

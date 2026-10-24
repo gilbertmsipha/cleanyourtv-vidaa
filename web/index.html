@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, initial-scale=1">
+<title>Home</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@200..600&display=swap">
+<style>
+  /* Sizes are the Android launcher's dp values doubled: this TV's page is 1920 x 1080 at 1:1. */
+  /* The helper serves the font itself; the hosted page gets it from Google Fonts (the link below). */
+  @font-face { font-family: OutfitLocal; src: url(fonts/outfit.ttf) format("truetype"); font-weight: 100 900; }
+
+  :root {
+    --tile-w: 360px; --tile-h: 202px; --tile-r: 32px; --pitch: 423px;
+    --band-pad: 28px; --dock-top: 698px;
+  }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; }
+  body { font-family: Outfit, OutfitLocal, sans-serif; color: #fff; -webkit-font-smoothing: antialiased; }
+
+  /* Ambient glow in the focused app's colour: two layers so one colour can fade into the next. */
+  .ambient { position: absolute; inset: 0; opacity: 0; transition: opacity .6s ease; pointer-events: none; }
+  .ambient.on { opacity: 1; }
+
+  /* Header: greeting, clock and date on the left, pills on the right. */
+  #header { position: absolute; left: 112px; right: 112px; top: 52px; display: flex; align-items: flex-end; z-index: 3; }
+  #left { flex: 1; min-width: 0; }
+  #greeting { margin-left: 8px; font-size: 24px; font-weight: 500; letter-spacing: .22em; text-transform: uppercase; color: rgba(255,255,255,.55); white-space: nowrap; }
+  #clockRow { display: flex; align-items: flex-end; margin-top: 6px; }
+  #clock { font-size: 104px; font-weight: 300; letter-spacing: -.04em; line-height: .86; }
+  #ampm { margin: 0 0 6px 12px; font-size: 30px; font-weight: 500; letter-spacing: .08em; color: rgba(255,255,255,.7); text-transform: uppercase; }
+  #divider { width: 2px; height: 52px; margin: 0 32px 0 32px; background: rgba(255,255,255,.2); }
+  #date { margin-bottom: 8px; font-size: 28px; font-weight: 400; letter-spacing: .14em; color: rgba(255,255,255,.65); text-transform: uppercase; white-space: nowrap; }
+
+  #pills { display: flex; gap: 20px; margin-bottom: 4px; }
+  .pill { height: 84px; padding: 0 34px 0 28px; border-radius: 42px; display: flex; align-items: center; gap: 16px;
+          font-size: 30px; font-weight: 500; color: #fff; box-sizing: border-box;
+          background: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.08));
+          border: 2px solid rgba(255,255,255,.22);
+          transition: transform .2s ease, background-color .2s ease; }
+  .pill svg { width: 40px; height: 40px; fill: currentColor; }
+  .pill.focus { background: rgba(255,255,255,.96); color: #111; border-color: transparent; transform: scale(1.06); }
+
+  /* Everything below the header scrolls in one rail; the viewport clips it under the header with a soft fade. */
+  #viewport { position: absolute; left: 0; right: 0; top: 230px; bottom: 0; overflow: hidden;
+              -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 70px); mask-image: linear-gradient(180deg, transparent 0, #000 70px); }
+  #rail { position: absolute; left: 0; top: -230px; width: 1920px; transition: transform .5s cubic-bezier(.2,.8,.2,1); will-change: transform; }
+
+  #hero { position: absolute; left: 138px; top: 498px; font-size: 96px; font-weight: 300; letter-spacing: -.02em; line-height: 1;
+          white-space: nowrap; transition: opacity .3s ease; }
+  #hero.hidden { opacity: 0; }
+
+  #band { position: absolute; left: 117px; width: 1686px; top: var(--dock-top); height: calc(var(--tile-h) + 2 * var(--band-pad));
+          border-radius: calc(var(--tile-r) + var(--band-pad)); background: #141416; border: 2px solid rgba(255,255,255,.12); box-sizing: border-box; }
+
+  .tile { position: absolute; width: var(--tile-w); height: var(--tile-h); border-radius: var(--tile-r); overflow: hidden;
+          background: #1c1c1e; display: flex; align-items: center; justify-content: center;
+          transition: transform .28s cubic-bezier(.2,.9,.3,1.2); }
+  .tile { background-size: 100% 100%; }
+  /* The square icon's left and right edges fade into the stretched backdrop, so no seam shows. */
+  .tile img { height: 100%; width: auto; display: block;
+              -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+              mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%); }
+  .tile .label { font-size: 30px; font-weight: 500; padding: 0 20px; text-align: center; }
+  .tile.focus { transform: scale(1.1); }
+  .tile.press { transform: scale(1.03); transition-duration: .12s; }
+  .name { position: absolute; width: var(--tile-w); text-align: center; font-size: 28px; font-weight: 500; letter-spacing: .02em;
+          color: rgba(255,255,255,.95); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          opacity: 0; transform: translateY(-12px); transition: opacity .25s ease, transform .25s ease; }
+  .name.show { opacity: 1; transform: translateY(0); }
+
+  /* The single glass highlight: sheen, a bright top specular, a crisp rim and a faint glow. */
+  #glass { position: absolute; left: 0; top: 0; border-radius: 36px; pointer-events: none; opacity: 0; transition: opacity .2s ease;
+           background: linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.07));
+           border: 3px solid rgba(255,255,255,.8); box-sizing: border-box;
+           box-shadow: 0 0 14px 2px rgba(255,255,255,.19); will-change: transform; }
+  #glass::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 45%; border-radius: 33px 33px 0 0;
+                   background: linear-gradient(180deg, rgba(255,255,255,.4), rgba(255,255,255,0)); }
+  #glass.on { opacity: 1; }
+
+  /* Without the helper the pills cannot do anything, so they are not shown. */
+  body.static:not(.helper) #pills { display: none; }
+
+  /* Inputs: a glass panel under the pills, one row per input (the launcher's popup_inputs). */
+  #inputs { position: absolute; left: 1134px; top: 196px; width: 520px; padding: 16px; border-radius: 40px; z-index: 6;
+            background: linear-gradient(180deg, rgba(42,42,46,.95), rgba(22,22,24,.96)); border: 2px solid rgba(255,255,255,.2);
+            box-sizing: border-box; opacity: 0; transform: translateY(-16px) scale(.98); pointer-events: none;
+            transition: opacity .22s ease, transform .22s ease; }
+  #inputs.open { opacity: 1; transform: none; }
+  #inputs .row { height: 84px; padding: 0 32px; border-radius: 28px; display: flex; align-items: center;
+                 font-size: 32px; font-weight: 400; color: rgba(255,255,255,.88); transition: background-color .15s ease; }
+  #inputs .row.focus { background: rgba(255,255,255,.96); color: #111; }
+
+  /* Hold OK on a tile: the tile menu, the same glass panel in the middle of the screen. */
+  #menu { position: absolute; left: 50%; top: 50%; width: 760px; padding: 16px; border-radius: 40px; z-index: 7;
+          background: linear-gradient(180deg, #2a2a2e, #161618); border: 2px solid rgba(255,255,255,.2);
+          box-sizing: border-box; opacity: 0; transform: translate(-50%, -46%) scale(.98); pointer-events: none;
+          transition: opacity .2s ease, transform .2s ease; }
+  #menu.open { opacity: 1; transform: translate(-50%, -50%); }
+  #scrim { position: absolute; inset: 0; z-index: 6; background: rgba(0,0,0,.6); opacity: 0; pointer-events: none; transition: opacity .2s ease; }
+  #scrim.on { opacity: 1; }
+  #menu .title { padding: 18px 32px 14px; font-size: 26px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+  #menu .row { height: 84px; padding: 0 32px; border-radius: 28px; display: flex; align-items: center;
+               font-size: 32px; color: rgba(255,255,255,.88); transition: background-color .15s ease; }
+  #menu .row.focus { background: rgba(255,255,255,.96); color: #111; }
+
+  #toast { position: absolute; left: 50%; bottom: 60px; transform: translate(-50%, 20px); padding: 22px 40px; border-radius: 40px;
+           background: rgba(30,30,34,.92); border: 2px solid rgba(255,255,255,.15); font-size: 28px; opacity: 0;
+           transition: opacity .3s ease, transform .3s ease; z-index: 5; white-space: nowrap; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+<div class="ambient" id="ambientA"></div>
+<div class="ambient" id="ambientB"></div>
+
+<div id="header">
+  <div id="left">
+    <div id="greeting"></div>
+    <div id="clockRow"><div id="clock"></div><div id="ampm"></div><div id="divider"></div><div id="date"></div></div>
+  </div>
+  <div id="pills">
+    <div class="pill" data-action="inputs"><svg viewBox="0 0 24 24"><path d="M8 2h8v6h2v6a6 6 0 0 1-5 5.9V22h-2v-2.1A6 6 0 0 1 6 14V8h2V2zm2 2v4h4V4h-4z"/></svg>Inputs</div>
+    <div class="pill" data-action="network" id="netPill"><svg viewBox="0 0 24 24"><path d="M12 18.5a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5zM12 13c2.3 0 4.4.9 6 2.4l-1.7 1.7A6.2 6.2 0 0 0 12 15.4c-1.7 0-3.2.6-4.3 1.7L6 15.4A8.6 8.6 0 0 1 12 13zm0-5c3.7 0 7.1 1.5 9.6 3.9l-1.7 1.7A11.2 11.2 0 0 0 12 10.4c-3 0-5.8 1.2-7.9 3.2l-1.7-1.7C4.9 9.5 8.3 8 12 8zm0-5c5.1 0 9.8 2 13.2 5.4l-1.7 1.7A16.3 16.3 0 0 0 12 5.4C7.5 5.4 3.4 7.2.5 10.1L-1.2 8.4C2.2 5 6.9 3 12 3z" transform="scale(.92) translate(1 0)"/></svg><span id="netLabel">Wi-Fi</span></div>
+    <div class="pill" data-action="settings"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1l.4 2.6h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>Settings</div>
+  </div>
+</div>
+
+<div id="viewport">
+  <div id="rail">
+    <div id="hero"></div>
+    <div id="band"></div>
+    <div id="tiles"></div>
+    <div id="glass"></div>
+  </div>
+</div>
+<div id="inputs"></div>
+<div id="scrim"></div>
+<div id="menu"></div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+  var COLS = 4, PITCH = 423, TILE_W = 360, TILE_H = 202, LEFT = 145;
+  var DOCK_TOP = 698, BAND_PAD = 28, GRID_TOP = DOCK_TOP + 342, ROW_PITCH = 270;
+  var GRID_SHIFT = -305;   // how far the rail slides up when focus leaves the dock
+
+  // Two modes. With the helper (/api/state answers), it launches any app over the TV's remote-control channel.
+  // Static (apps.json, ?static=1 to force): it opens web apps by loading their address, which needs nothing but
+  // the page; colours are precomputed, since the browser may not read VIDAA's icons.
+  var state = { apps: [], dockSize: 4, clock24: false, greetingName: '', static: false, removedCount: 0, loaded: null };
+  var focus = { area: 'dock', index: 0, pill: 2, input: 0 };
+  var tiles = [], names = [], colours = {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ---------- clock, date, greeting ----------
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var lastMinute = -1;
+  function tick() {
+    var d = new Date();
+    if (d.getMinutes() === lastMinute) return;
+    lastMinute = d.getMinutes();
+    var h = d.getHours(), m = ('0' + d.getMinutes()).slice(-2);
+    if (state.clock24) { $('clock').textContent = ('0' + h).slice(-2) + ':' + m; $('ampm').textContent = ''; }
+    else { $('clock').textContent = ((h % 12) || 12) + ':' + m; $('ampm').textContent = h < 12 ? 'am' : 'pm'; }
+    $('date').innerHTML = DAYS[d.getDay()] + '&nbsp;&nbsp;' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+    var g = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    $('greeting').textContent = state.greetingName ? g + ', ' + state.greetingName : g;
+  }
+
+  function network() {
+    try {
+      var t = window.Hisense_GetNetType && Hisense_GetNetType();
+      if (t !== undefined && t !== null) $('netLabel').textContent = /eth|wire|^1$/i.test(String(t)) && !/wireless/i.test(String(t)) ? 'Ethernet' : 'Wi-Fi';
+    } catch (e) {}
+  }
+
+  // ---------- layout ----------
+  function tilePos(i) {
+    if (i < state.dockSize) return { x: LEFT + i * PITCH, y: DOCK_TOP + BAND_PAD };
+    var g = i - state.dockSize;
+    return { x: LEFT + (g % COLS) * PITCH, y: GRID_TOP + Math.floor(g / COLS) * ROW_PITCH };
+  }
+
+  function build() {
+    var box = $('tiles');
+    box.innerHTML = '';
+    tiles = []; names = [];
+    state.apps.forEach(function (app, i) {
+      var p = tilePos(i);
+      var t = document.createElement('div');
+      t.className = 'tile';
+      t.style.left = p.x + 'px'; t.style.top = p.y + 'px';
+      var img = new Image();
+      if (app.glow) {
+        colours[app.appId] = app.glow;
+        if (app.bg) t.style.backgroundColor = app.bg;
+        if (app.backdrop) t.style.backgroundImage = 'url(' + app.backdrop + ')';
+      } else img.onload = function () { sample(app, img, t); };
+      img.onerror = function () { t.innerHTML = '<div class="label"></div>'; t.firstChild.textContent = app.name; };
+      img.src = app.icon;
+      t.appendChild(img);
+      box.appendChild(t);
+      var n = document.createElement('div');
+      n.className = 'name'; n.textContent = app.name;
+      n.style.left = p.x + 'px'; n.style.top = (p.y + TILE_H + 22) + 'px';
+      box.appendChild(n);
+      tiles.push(t); names.push(n);
+    });
+    var dock = Math.min(state.dockSize, state.apps.length);
+    $('band').style.width = (dock ? (dock - 1) * PITCH + TILE_W + 2 * BAND_PAD + 4 : 0) + 'px';
+  }
+
+  // The icon's edge colour fills the 16:9 tile around the square icon; its most vivid colour tints the glow.
+  function sample(app, img, tile) {
+    try {
+      var c = document.createElement('canvas'); c.width = c.height = 24;
+      var x = c.getContext('2d'); x.drawImage(img, 0, 0, 24, 24);
+      var px = x.getImageData(0, 0, 24, 24).data;
+      var er = 0, eg = 0, eb = 0, en = 0, vr = 0, vg = 0, vb = 0, vw = 0;
+      for (var yy = 0; yy < 24; yy++) for (var xx = 0; xx < 24; xx++) {
+        var o = (yy * 24 + xx) * 4, r = px[o], g = px[o + 1], b = px[o + 2], a = px[o + 3];
+        if (a < 200) continue;
+        if (xx === 0 || xx === 23) { er += r; eg += g; eb += b; en++; }
+        var mx = Math.max(r, g, b), mn = Math.min(r, g, b), sat = mx ? (mx - mn) / mx : 0;
+        var w = sat * sat * (mx / 255);
+        vr += r * w; vg += g * w; vb += b * w; vw += w;
+      }
+      if (en > 20) tile.style.backgroundColor = 'rgb(' + Math.round(er / en) + ',' + Math.round(eg / en) + ',' + Math.round(eb / en) + ')';
+      // Behind it, the icon's outer columns, a few pixels across, stretched over the tile: it softens like a blur at no cost.
+      var s = document.createElement('canvas'); s.width = 2; s.height = 5;
+      var sx = s.getContext('2d'), iw = img.naturalWidth, ih = img.naturalHeight;
+      sx.drawImage(img, 0, 0, 2, ih, 0, 0, 1, 5); sx.drawImage(img, iw - 2, 0, 2, ih, 1, 0, 1, 5);
+      tile.style.backgroundImage = 'url(' + s.toDataURL() + ')';
+      colours[app.appId] = vw > 2 ? [Math.round(vr / vw), Math.round(vg / vw), Math.round(vb / vw)] : [150, 150, 160];
+    } catch (e) { colours[app.appId] = [150, 150, 160]; }
+    if (focused() === app) ambient(app);
+  }
+
+  // ---------- ambient glow ----------
+  var ambientFront = 'A', ambientKey = '';
+  function ambient(app) {
+    var c = app && colours[app.appId];
+    var key = c ? c.join(',') : '';
+    if (key === ambientKey) return;
+    ambientKey = key;
+    var next = ambientFront === 'A' ? 'B' : 'A';
+    var el = $('ambient' + next), old = $('ambient' + ambientFront);
+    if (c) {
+      var rgb = c.join(',');
+      // The launcher's radial glow: centred at 32% / 42%, radius 62% of the width, 36% → 15% → 0 alpha.
+      el.style.background = 'radial-gradient(circle 1190px at 32% 42%, rgba(' + rgb + ',.36) 0%, rgba(' + rgb + ',.15) 45%, rgba(' + rgb + ',0) 100%)';
+      el.classList.add('on');
+    }
+    old.classList.remove('on');
+    ambientFront = next;
+  }
+
+  // ---------- glass highlight on a spring (stiffness 260, damping ratio 0.58, as the launcher) ----------
+  var spring = { x: 0, y: 0, vx: 0, vy: 0, tx: 0, ty: 0, running: false, placed: false, last: 0 };
+  var K = 260, C = 2 * 0.58 * Math.sqrt(K);
+  var GW = TILE_W * 1.1 + 24, GH = TILE_H * 1.1 + 24;
+  function glassTo(i) {
+    var p = tilePos(i);
+    spring.tx = p.x + TILE_W / 2 - GW / 2;
+    spring.ty = p.y + TILE_H / 2 - GH / 2;
+    var g = $('glass');
+    g.style.width = GW + 'px'; g.style.height = GH + 'px';
+    if (!spring.placed) { spring.x = spring.tx; spring.y = spring.ty; spring.placed = true; paintGlass(); }
+    g.classList.add('on');
+    if (!spring.running) { spring.running = true; spring.last = 0; requestAnimationFrame(step); }
+  }
+  function step(now) {
+    var dt = spring.last ? Math.min((now - spring.last) / 1000, 1 / 30) : 1 / 60;
+    spring.last = now;
+    var ax = -K * (spring.x - spring.tx) - C * spring.vx, ay = -K * (spring.y - spring.ty) - C * spring.vy;
+    spring.vx += ax * dt; spring.vy += ay * dt;
+    spring.x += spring.vx * dt; spring.y += spring.vy * dt;
+    var done = Math.abs(spring.x - spring.tx) < .5 && Math.abs(spring.y - spring.ty) < .5 && Math.abs(spring.vx) < 5 && Math.abs(spring.vy) < 5;
+    if (done) { spring.x = spring.tx; spring.y = spring.ty; spring.vx = spring.vy = 0; }
+    paintGlass();
+    if (done) spring.running = false; else requestAnimationFrame(step);
+  }
+  function paintGlass() { $('glass').style.transform = 'translate(' + spring.x + 'px,' + spring.y + 'px)'; }
+
+  // ---------- focus ----------
+  function onTop() { return focus.area === 'pills' || focus.area === 'inputs'; }
+  function focused() { return onTop() ? null : state.apps[focus.index]; }
+
+  function render() {
+    var pills = document.querySelectorAll('.pill');
+    for (var p = 0; p < pills.length; p++) pills[p].classList.toggle('focus', onTop() && p === focus.pill);
+    tiles.forEach(function (t, i) { t.classList.toggle('focus', !onTop() && i === focus.index); });
+    names.forEach(function (n, i) { n.classList.toggle('show', !onTop() && i === focus.index && i >= state.dockSize); });
+
+    var inDock = !onTop() && focus.index < state.dockSize;
+    var row = focus.index < state.dockSize ? -1 : Math.floor((focus.index - state.dockSize) / COLS);
+    var shift = onTop() || inDock ? 0 : GRID_SHIFT - row * ROW_PITCH;
+    $('rail').style.transform = 'translateY(' + shift + 'px)';
+
+    var app = focused();
+    $('hero').textContent = inDock && app ? app.name : $('hero').textContent;
+    $('hero').classList.toggle('hidden', !inDock);
+    if (app) { glassTo(focus.index); ambient(app); }
+    else $('glass').classList.remove('on');
+  }
+
+  function move(dx, dy) {
+    var n = state.apps.length, dock = Math.min(state.dockSize, n);
+    if (focus.area === 'pills') {
+      var count = document.querySelectorAll('.pill').length;
+      if (dx) focus.pill = Math.max(0, Math.min(count - 1, focus.pill + dx));
+      if (dy > 0 && n) { focus.area = 'dock'; focus.index = Math.min(focus.lastDock || 0, dock - 1); }
+      return render();
+    }
+    var i = focus.index;
+    if (i < dock) {
+      if (dx) focus.index = Math.max(0, Math.min(dock - 1, i + dx));
+      if (dy < 0 && (!state.static || state.helper)) { focus.lastDock = i; focus.area = 'pills'; }
+      if (dy > 0 && n > dock) { focus.lastDock = i; focus.index = dock + Math.min(i, Math.min(COLS, n - dock) - 1); }
+      return render();
+    }
+    var g = i - dock, col = g % COLS;
+    if (dx) {
+      var ng = g + dx;
+      if (ng >= 0 && ng < n - dock && Math.floor(ng / COLS) === Math.floor(g / COLS)) focus.index = dock + ng;
+    }
+    if (dy < 0) focus.index = g < COLS ? Math.min(focus.lastDock || col, dock - 1) : i - COLS;
+    if (dy > 0 && g + COLS < n - dock) focus.index = i + COLS;
+    else if (dy > 0 && Math.floor(g / COLS) < Math.floor((n - dock - 1) / COLS)) focus.index = n - 1;
+    render();
+  }
+
+  // ---------- actions ----------
+  function post(path, body) {
+    return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); });
+  }
+  var toastTimer;
+  function toast(msg) {
+    $('toast').textContent = msg; $('toast').classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(function () { $('toast').classList.remove('show'); }, 3500);
+  }
+
+  // The helper acts for the page: /go opens an app, switches input or presses a key, then comes back here.
+  function viaHelper(query) {
+    try { sessionStorage.setItem('cyt-focus', String(focus.index)); } catch (e) {}
+    var base = state.static ? state.helper : '';
+    setTimeout(function () { location.href = base + '/go?' + query + '&back=' + encodeURIComponent(location.href); }, 120);
+  }
+
+  function renderInputs() {
+    var box = $('inputs');
+    box.classList.toggle('open', focus.area === 'inputs');
+    for (var i = 0; i < box.children.length; i++) box.children[i].classList.toggle('focus', i === focus.input);
+  }
+  function openInputs() {
+    var box = $('inputs');
+    box.innerHTML = '';
+    (state.sources || []).forEach(function (s) {
+      var row = document.createElement('div');
+      row.className = 'row'; row.textContent = s.name;
+      box.appendChild(row);
+    });
+    if (!box.children.length) { toast('No inputs found'); return; }
+    focus.area = 'inputs'; focus.input = 0;
+    renderInputs();
+  }
+  function closeInputs() { focus.area = 'pills'; renderInputs(); render(); }
+
+  // ---------- tile menu: remove an app from Home, or bring removed ones back ----------
+  // Removed apps stay installed on the TV. With the helper the list lives there; without it, in this browser.
+  var menu = { items: [], index: 0, app: null };
+  function localRemoved() { try { return JSON.parse(localStorage.getItem('cyt-removed') || '[]'); } catch (e) { return []; } }
+  function saveLocalRemoved(ids) { try { localStorage.setItem('cyt-removed', JSON.stringify(ids)); } catch (e) {} }
+
+  function openMenu() {
+    var app = focused();
+    if (!app) return;
+    menu.app = app; menu.index = 0;
+    menu.items = [{ label: 'Remove from Home', act: 'remove' }];
+    if (state.removedCount) menu.items.push({ label: 'Restore removed apps (' + state.removedCount + ')', act: 'restore' });
+    menu.items.push({ label: 'Cancel', act: 'cancel' });
+    var box = $('menu');
+    box.innerHTML = '<div class="title"></div>';
+    box.firstChild.textContent = app.name;
+    menu.items.forEach(function (it) { var r = document.createElement('div'); r.className = 'row'; r.textContent = it.label; box.appendChild(r); });
+    focus.area = 'menu';
+    renderMenu();
+  }
+  function renderMenu() {
+    var box = $('menu'), rows = box.querySelectorAll('.row');
+    box.classList.toggle('open', focus.area === 'menu');
+    $('scrim').classList.toggle('on', focus.area === 'menu');
+    for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('focus', i === menu.index);
+  }
+  function closeMenu() { focus.area = focus.index < state.dockSize ? 'dock' : 'grid'; renderMenu(); }
+  function menuChoose() {
+    var it = menu.items[menu.index], app = menu.app;
+    closeMenu();
+    if (!it || it.act === 'cancel') return;
+    if (state.static) {
+      saveLocalRemoved(it.act === 'restore' ? [] : localRemoved().concat([app.appId]));
+      start(state.loaded);
+    } else {
+      post('/api/remove', it.act === 'restore' ? { restore_all: true } : { appId: app.appId, removed: true })
+        .then(function () { return load('/api/state'); }).then(start, function () { toast('Cannot reach the helper'); });
+    }
+    if (it.act === 'remove') toast(app.name + ' removed from Home. It is still installed on the TV.');
+  }
+
+  function activate() {
+    if (focus.area === 'menu') { menuChoose(); return; }
+    if (focus.area === 'inputs') {
+      var s = state.sources[focus.input];
+      closeInputs();
+      if (s) viaHelper('source=' + encodeURIComponent(s.id));
+      return;
+    }
+    if (focus.area === 'pills') {
+      var action = document.querySelectorAll('.pill')[focus.pill].getAttribute('data-action');
+      if (action === 'inputs') openInputs();
+      else viaHelper('key=KEY_MENU');
+      return;
+    }
+    var app = focused(), t = tiles[focus.index];
+    if (!app) return;
+    t.classList.add('press');
+    setTimeout(function () { t.classList.remove('press'); }, 160);
+    if (state.static) {
+      // A native app needs the helper. This https page may not call a LAN http address, but it may navigate to
+      // one: the helper opens the app and sends the browser back here. An app with a web version but a better
+      // native one (YouTube) goes native when there is a helper.
+      if (app.native || (app.preferNative && state.helper)) { viaHelper('app=' + encodeURIComponent(app.appId)); return; }
+      try { sessionStorage.setItem('cyt-focus', String(focus.index)); } catch (e) {}
+      setTimeout(function () { location.href = app.url; }, 120);
+      return;
+    }
+    post('/api/launch', { appId: app.appId }).then(function (r) {
+      if (!r.ok) toast('Could not open ' + app.name + (r.error ? ': ' + r.error : ''));
+    }, function () { toast('Cannot reach the helper, so ' + app.name + ' did not open'); });
+  }
+
+  // A tap on OK opens the tile; holding it opens the tile menu. Activation waits for keyup, or for a short timer
+  // on a remote that sends no keyup; a second keydown while waiting is the key repeating, so it is a hold.
+  var ok = { pending: false, timer: 0, keyup: false };
+  function okDown() {
+    if (ok.pending) { clearTimeout(ok.timer); ok.pending = false; openMenu(); return; }
+    ok.pending = true;
+    ok.timer = setTimeout(function () {
+      if (!ok.pending) return;
+      ok.pending = false;
+      if (ok.keyup) openMenu(); else activate();
+    }, 650);
+  }
+  document.addEventListener('keyup', function (e) {
+    if (e.keyCode !== 13) return;
+    ok.keyup = true;
+    if (ok.pending) { clearTimeout(ok.timer); ok.pending = false; activate(); }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    var k = e.keyCode, handled = true;
+    if (focus.area === 'menu') {
+      if (k === 38 || k === 40) { menu.index = Math.max(0, Math.min(menu.items.length - 1, menu.index + (k === 40 ? 1 : -1))); renderMenu(); }
+      else if (k === 13 && !e.repeat) activate();
+      else if (k === 8 || k === 461 || k === 27) closeMenu();
+      e.preventDefault();
+      return;
+    }
+    if (focus.area === 'inputs') {
+      if (k === 38 || k === 40) { focus.input = Math.max(0, Math.min(state.sources.length - 1, focus.input + (k === 40 ? 1 : -1))); renderInputs(); }
+      else if (k === 13) activate();
+      else if (k === 8 || k === 461 || k === 27 || k === 37 || k === 39) closeInputs();
+      e.preventDefault();
+      return;
+    }
+    if (k === 37) move(-1, 0);
+    else if (k === 39) move(1, 0);
+    else if (k === 38) move(0, -1);
+    else if (k === 40) move(0, 1);
+    else if (k === 13) { if (onTop()) { if (!e.repeat) activate(); } else okDown(); }
+    else if (k === 8 || k === 461 || k === 27) {
+      // Back: from the grid or the pills, return to the dock; on the dock it stays on Home.
+      if (focus.area === 'pills' || focus.index >= state.dockSize) { focus.area = 'dock'; focus.index = Math.min(focus.lastDock || 0, state.dockSize - 1); render(); }
+    } else handled = false;
+    if (handled) e.preventDefault();
+  });
+
+  // ---------- start ----------
+  tick(); setInterval(tick, 1000); network();
+  function load(url) { return fetch(url, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw r.status; return r.json(); }); }
+  // ?helper=http://<lan ip>:8765 in the tile's address: native apps are shown and opened through that helper.
+  var helperArg = /[?&]helper=([^&]+)/.exec(location.search);
+  state.helper = helperArg && /^https?:\/\//.test(decodeURIComponent(helperArg[1])) ? decodeURIComponent(helperArg[1]).replace(/\/+$/, '') : '';
+
+  function start(s) {
+    state.loaded = s;
+    var apps = s.apps || [], dockSize = s.dock_size;
+    state.removedCount = s.removed_count || 0;
+    if (state.static) {
+      var removed = localRemoved();
+      apps = apps.filter(function (a) { return removed.indexOf(a.appId) < 0; });
+      state.removedCount = removed.length;
+      // apps.json lists every app once; the dock depends on whether native apps can be opened.
+      apps = apps.filter(function (a) { return !a.native || state.helper; });
+      var dock = (state.helper && s.helper_dock) || s.dock || [];
+      var rank = function (a) { var i = dock.indexOf(a.appId); return i < 0 ? dock.length : i; };
+      apps = apps.map(function (a, i) { return { a: a, i: i }; })
+        .sort(function (x, y) { return rank(x.a) - rank(y.a) || x.i - y.i; }).map(function (x) { return x.a; });
+      dockSize = apps.filter(function (a) { return dock.indexOf(a.appId) >= 0; }).length;
+    }
+    state.apps = apps;
+    state.dockSize = Math.min(dockSize || 4, COLS, state.apps.length);
+    state.clock24 = !!s.clock_24h; state.greetingName = s.greeting_name || '';
+    state.sources = s.sources || [];
+    document.body.classList.toggle('static', state.static);
+    document.body.classList.toggle('helper', !!state.helper);
+    try {
+      var saved = parseInt(sessionStorage.getItem('cyt-focus'), 10);
+      sessionStorage.removeItem('cyt-focus');
+      if (saved >= 0 && saved < state.apps.length) { focus.index = saved; focus.lastDock = Math.min(saved, state.dockSize - 1); }
+    } catch (e) {}
+    if (focus.index >= state.apps.length) focus.index = Math.max(0, state.apps.length - 1);
+    if (!onTop()) focus.area = focus.index < state.dockSize ? 'dock' : 'grid';
+    lastMinute = -1; tick();
+    build(); render();
+  }
+  function startStatic() {
+    state.static = true;
+    load('apps.json').then(start, function () { toast('Could not load the app list'); });
+  }
+  if (/[?&]static=1/.test(location.search)) startStatic();
+  else load('/api/state').then(start, startStatic);
+})();
+</script>
+</body>
+</html>

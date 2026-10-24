@@ -1,0 +1,11 @@
+# Personal to one home: the TV's name and addresses, its app list, logs, probe results and the pairing.
+config.json
+data/
+reports/
+web/apps.json
+setup/session.json
+*.zip
+*.log
+
+.venv/
+__pycache__/

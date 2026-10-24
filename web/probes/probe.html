@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CYT Probe</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e8e8; font: 22px/1.35 sans-serif; }
+  body { padding: 40px 60px; }
+  h1 { font-size: 34px; margin: 0 0 6px; color: #cfffcf; }
+  .sub { color: #8a8a8a; margin-bottom: 24px; }
+  .cols { display: flex; }
+  .col { flex: 1; padding-right: 30px; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 17px; margin: 0; }
+  #keys { color: #ffd479; }
+  #status { color: #7fd3ff; }
+</style>
+</head>
+<body>
+<h1>Clean Your TV · VIDAA probe</h1>
+<div class="sub">Press a few remote buttons (arrows, OK, Back, colours, numbers). Results are sent to the PC automatically.</div>
+<div id="status">collecting…</div>
+<div class="cols">
+  <div class="col"><pre id="env"></pre></div>
+  <div class="col"><pre id="keys">keys pressed:</pre></div>
+</div>
+<script>
+(function () {
+  var report = { t: new Date().toString(), href: location.href, keys: [] };
+
+  function supports(prop, val) {
+    try { return !!(window.CSS && CSS.supports && CSS.supports(prop, val)); } catch (e) { return 'err'; }
+  }
+
+  report.ua = navigator.userAgent;
+  report.screen = { w: screen.width, h: screen.height, iw: window.innerWidth, ih: window.innerHeight, dpr: window.devicePixelRatio };
+  report.css = {
+    grid: supports('display', 'grid'),
+    flexGap: supports('gap', '10px'),
+    backdrop: supports('backdrop-filter', 'blur(4px)') || supports('-webkit-backdrop-filter', 'blur(4px)'),
+    vars: supports('--a', '0'),
+    filterBlur: supports('filter', 'blur(4px)'),
+    aspectRatio: supports('aspect-ratio', '1')
+  };
+  report.js = {
+    promise: typeof Promise, fetch: typeof fetch, arrow: (function () { try { return eval('(()=>1)()') === 1; } catch (e) { return false; } })(),
+    localStorage: (function () { try { localStorage.setItem('cyt', '1'); return localStorage.getItem('cyt') === '1'; } catch (e) { return 'err: ' + e; } })(),
+    canvas: !!document.createElement('canvas').getContext,
+    rAF: typeof requestAnimationFrame
+  };
+
+  // Every global the VIDAA browser adds beyond a blank page: these are the TV's own APIs.
+  // A TV may inject into iframes too, so anything with a vendor-like name is always kept.
+  var vendor = /hisense|vidaa|vow|omi|oipf|hbb|tv|launch|appmgr|application/i;
+  var globals = [];
+  try {
+    var baseline = {};
+    var frame = document.createElement('iframe');
+    frame.style.display = 'none';
+    document.body.appendChild(frame);
+    var bn = Object.getOwnPropertyNames(frame.contentWindow);
+    for (var b = 0; b < bn.length; b++) baseline[bn[b]] = true;
+    document.body.removeChild(frame);
+    var names = Object.getOwnPropertyNames(window);
+    for (var i = 0; i < names.length; i++) {
+      var n = names[i];
+      if (baseline[n] && !vendor.test(n)) continue;
+      var t; try { t = typeof window[n]; } catch (e) { t = 'err'; }
+      globals.push(n + ' : ' + t);
+    }
+  } catch (e) { globals.push('enumeration failed: ' + e); }
+  report.globals = globals;
+
+  // Look one level inside objects the TV adds, so we can see method names (never called).
+  report.objects = {};
+  for (var j = 0; j < globals.length; j++) {
+    var name = globals[j].split(' : ')[0];
+    try {
+      var o = window[name];
+      if (o && typeof o === 'object') {
+        var members = [];
+        for (var k in o) { try { members.push(k + ':' + typeof o[k]); } catch (e) { members.push(k + ':err'); } if (members.length > 80) break; }
+        report.objects[name] = members;
+      }
+    } catch (e) {}
+  }
+
+  function render() {
+    document.getElementById('env').textContent =
+      'UA: ' + report.ua + '\n\nscreen: ' + JSON.stringify(report.screen) +
+      '\ncss: ' + JSON.stringify(report.css) + '\njs: ' + JSON.stringify(report.js) +
+      '\n\nTV globals (' + globals.length + '):\n' + globals.join('\n');
+  }
+  render();
+
+  var timer = null;
+  function send() {
+    var body = JSON.stringify(report);
+    try {
+      var x = new XMLHttpRequest();
+      x.open('POST', '/report', true);
+      x.setRequestHeader('Content-Type', 'application/json');
+      x.onload = function () { document.getElementById('status').textContent = 'sent to PC ✓ (' + new Date().toLocaleTimeString() + ')'; };
+      x.onerror = function () { document.getElementById('status').textContent = 'could not reach the PC'; };
+      x.send(body);
+    } catch (e) { document.getElementById('status').textContent = 'send failed: ' + e; }
+  }
+  function sendSoon() { if (timer) clearTimeout(timer); timer = setTimeout(send, 600); }
+
+  document.addEventListener('keydown', function (e) {
+    var k = { keyCode: e.keyCode, which: e.which, key: e.key, code: e.code };
+    report.keys.push(k);
+    document.getElementById('keys').textContent += '\n' + JSON.stringify(k);
+    // Stop arrows and Back from scrolling or leaving the page while we record them.
+    if (e.keyCode !== 461 && e.keyCode !== 8 && e.keyCode !== 27) e.preventDefault();
+    sendSoon();
+  });
+
+  send();
+})();
+</script>
+</body>
+</html>

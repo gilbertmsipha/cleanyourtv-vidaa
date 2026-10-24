@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CYT Probe 6</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e8e8; font: 20px/1.35 sans-serif; }
+  body { padding: 40px 60px; }
+  h1 { font-size: 32px; margin: 0 0 16px; color: #cfffcf; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 15px; margin: 0; }
+</style>
+</head>
+<body>
+<h1>Clean Your TV · privacy settings and name lookup (read-only)</h1>
+<pre id="out">checking… (about 8 seconds)</pre>
+<script>
+(function () {
+  var r = { page: 'probe6', t: new Date().toString(), privacy: {}, tvinfo: {}, initialData: {}, names: {} };
+  // Identifiers stay on the TV: only their presence is reported.
+  var IDENT = /(^|_)(id|uuid|mac|serial|sn|ip|email|account|token|user|name|devicecode|chipid|ssid)$|uuid|serial|macaddr|email|token|deviceid|adsid/i;
+  function clean(obj) {
+    var out = {};
+    for (var k in obj) {
+      var v = obj[k];
+      if (IDENT.test(k)) { out[k] = v ? '(present)' : '(empty)'; continue; }
+      out[k] = (v && typeof v === 'object') ? clean(v) : (typeof v === 'string' ? v.slice(0, 120) : v);
+    }
+    return out;
+  }
+  function call(name) {
+    try { var f = window[name]; if (typeof f !== 'function') return 'missing'; return f(); } catch (e) { return 'threw: ' + e; }
+  }
+
+  r.privacy.EulaAdEnable = call('Hisense_GetEulaAdEnable');
+  r.privacy.AdTargetEnable = call('Hisense_GetAdTargetEnable');
+  var ads = call('Hisense_GetAdsID');
+  r.privacy.AdsID = ads && String(ads).length > 4 ? '(present, ' + String(ads).length + ' chars)' : String(ads);
+  r.privacy.ParentControlEnabled = call('Hisense_GetParentControlEnabled');
+  r.privacy.TTSEnable = call('Hisense_GetTTSEnable');
+  r.privacy.WolEnable = call('Hisense_GetWolEnable');
+  r.privacy.WowEnable = call('Hisense_GetWowEnable');
+
+  try { r.tvinfo = clean(window.TvInfo_Json || {}); } catch (e) { r.tvinfo = 'err ' + e; }
+  try {
+    var x = new XMLHttpRequest();
+    x.open('POST', 'http://localhost:9009/service/tvinfo', false);
+    x.setRequestHeader('identifier', vowOSContext.getAppIdentifier());
+    x.send(JSON.stringify({ api: 'initialData' }));
+    var d = JSON.parse(x.responseText);
+    r.initialData = clean(typeof d.msg === 'object' ? d.msg : { msg: d.msg });
+  } catch (e) { r.initialData = 'err ' + e; }
+
+  // Can the TV find the helper PC by name instead of by address?
+  // The computer to look up by name: probe6.html?host=MY-PC (defaults to a placeholder).
+  var host = (/[?&]host=([^&]+)/.exec(location.search) || [0, 'MY-PC'])[1], pending = 0;
+  ['http://' + host + '.local:8765/tile.jpg', 'http://' + host + ':8765/tile.jpg', 'http://' + host.toLowerCase() + '.local:8765/tile.jpg',
+   'http://' + host + '.lan:8765/tile.jpg', 'http://' + host + '.home:8765/tile.jpg'].forEach(function (u) {
+    pending++;
+    var img = new Image(), t0 = Date.now(), done = false;
+    function fin(res) { if (done) return; done = true; r.names[u] = res + ' (' + (Date.now() - t0) + ' ms)'; pending--; }
+    img.onload = function () { fin('REACHED'); };
+    img.onerror = function () { fin('failed'); };
+    setTimeout(function () { fin('timeout'); }, 6000);
+    img.src = u + '?t=' + t0;
+  });
+
+  function send() {
+    document.getElementById('out').textContent = JSON.stringify(r, null, 1).slice(0, 7000);
+    var x = new XMLHttpRequest();
+    x.open('POST', '/report', true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.send(JSON.stringify(r));
+  }
+  setTimeout(send, 7000);
+})();
+</script>
+</body>
+</html>

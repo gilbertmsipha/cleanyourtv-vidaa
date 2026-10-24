@@ -1,0 +1,22 @@
+{
+  "tv_name": "My TV",
+  "port": 8765,
+  "allowed_clients": ["127.0.0.1"],
+  "sidee_dir": "../sidee",
+  "launcher_url": "https://YOUR-PROJECT.vercel.app/",
+  "tile_icon": "https://YOUR-PROJECT.vercel.app/tile.jpg",
+  "launcher_origins": ["https://YOUR-PROJECT.vercel.app"],
+  "dock": ["1", "3", "2", "295"],
+  "static_dock": ["3", "295", "167", "2256"],
+  "helper_dock": ["1", "3", "2", "295"],
+  "native_apps": ["1", "2", "15", "284"],
+  "web_urls": {"3": "https://www.youtube.com/tv"},
+  "prefer_native_with_helper": ["3"],
+  "hidden": ["166"],
+  "greeting_name": "",
+  "clock_24h": false,
+  "home_takeover": true,
+  "takeover_on_power_on": true,
+  "power_on_delay_seconds": 5,
+  "app_list_refresh_minutes": 5
+}

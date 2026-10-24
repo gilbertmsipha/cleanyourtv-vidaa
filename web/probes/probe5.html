@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CYT Probe 5</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e8e8; font: 20px/1.35 sans-serif; }
+  body { padding: 40px 60px; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 15px; margin: 0; }
+</style>
+</head>
+<body>
+<pre id="out">asking…</pre>
+<script>
+(function () {
+  // Launch- and key-style API names, each with empty arguments, so an API that exists can only reject them.
+  // Nothing that could install, remove or change a setting is asked.
+  var apis = ['launch', 'launchApp', 'startApp', 'start', 'run', 'open', 'openApp', 'startThirdApp', 'sendKey',
+              'keyEvent', 'injectKey', 'simulateKey', 'getApiList', 'help', 'list', 'getAppList'];
+  var r = { page: 'probe5', t: new Date().toString(), res: {} };
+  var id = ''; try { id = vowOSContext.getAppIdentifier(); } catch (e) {}
+  ['pkgmgr', 'hiutils'].forEach(function (svc) {
+    apis.forEach(function (api) {
+      try {
+        var x = new XMLHttpRequest();
+        x.open('POST', 'http://localhost:9009/service/' + svc, false);
+        x.setRequestHeader('identifier', id);
+        x.send(JSON.stringify({ api: api, args: '' }));
+        r.res[svc + '.' + api] = x.status + ' ' + String(x.responseText).slice(0, 400);
+      } catch (e) { r.res[svc + '.' + api] = 'threw: ' + e; }
+    });
+  });
+  document.getElementById('out').textContent = JSON.stringify(r, null, 1);
+  var x = new XMLHttpRequest();
+  x.open('POST', '/report', true);
+  x.setRequestHeader('Content-Type', 'application/json');
+  x.send(JSON.stringify(r));
+})();
+</script>
+</body>
+</html>

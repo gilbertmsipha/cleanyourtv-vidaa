@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CYT Launch test</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e8e8; font: 24px/1.4 sans-serif; }
+  body { padding: 60px 80px; }
+  h1 { font-size: 36px; margin: 0 0 8px; color: #cfffcf; }
+  .sub { color: #8a8a8a; margin-bottom: 40px; }
+  .row { display: flex; gap: 36px; }
+  .tile { width: 260px; height: 160px; border-radius: 22px; background: #1b1d22; display: flex; align-items: center; justify-content: center; font-size: 28px; transition: transform .15s; outline: none; }
+  .tile.focus { background: #2d3340; transform: scale(1.08); box-shadow: 0 0 0 4px #cfffcf; }
+  pre { margin-top: 40px; font-size: 18px; color: #ffd479; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h1>Launch test</h1>
+<div class="sub">Left / Right to choose, OK to launch. Then come back here with Back or Home and try the next one.</div>
+<div class="row" id="row"></div>
+<pre id="log"></pre>
+<script>
+(function () {
+  // Taken from the TV's own app list (backup/vidaa-applist-*.json).
+  var apps = [
+    { name: 'Netflix', appId: '1', url: 'netflix', storeType: 98 },
+    { name: 'YouTube', appId: '3', url: 'youtube', storeType: 98 },
+    { name: 'Disney+', appId: '295', url: 'https://cd-dmgz.bamgrid.com/bbd/hisense_tv/index.html', storeType: 99 }
+  ];
+  var row = document.getElementById('row'), logEl = document.getElementById('log');
+  var focus = 0, events = [];
+
+  function log(s) { logEl.textContent = s + '\n' + logEl.textContent; events.push(s); report(); }
+
+  function report() {
+    try {
+      var x = new XMLHttpRequest();
+      x.open('POST', '/report', true);
+      x.setRequestHeader('Content-Type', 'application/json');
+      x.send(JSON.stringify({ page: 'launchtest', t: new Date().toString(), events: events, keys: [] }));
+    } catch (e) {}
+  }
+
+  // The same message VIDAA's own home (V Home) sends to start an app.
+  function launch(app) {
+    var msg = {
+      type: 'APPMessage', MsgType: 'appControl', action: 'startThirdApp', startAppType: 1, source: 'browser',
+      param: {
+        appName: 'cyt-launcher', startFrom: 'app#cytprobe', startFromURL: location.href,
+        third_appName: app.name, deep_linking: app.url, third_appId: app.appId, storeType: app.storeType
+      }
+    };
+    var send = (window.omi_platform && omi_platform.sendPlatformMessage) || (window.opera_omi && opera_omi.sendPlatformMessage);
+    if (!send) { log('no sendPlatformMessage on this page'); return; }
+    try {
+      var r = send.call(window.omi_platform || window.opera_omi, JSON.stringify(msg));
+      log('launch ' + app.name + ' -> returned ' + JSON.stringify(r));
+    } catch (e) { log('launch ' + app.name + ' threw ' + e); }
+  }
+
+  for (var i = 0; i < apps.length; i++) {
+    var d = document.createElement('div');
+    d.className = 'tile'; d.textContent = apps[i].name;
+    row.appendChild(d);
+  }
+  function paint() { for (var i = 0; i < row.children.length; i++) row.children[i].className = 'tile' + (i === focus ? ' focus' : ''); }
+  paint();
+
+  document.addEventListener('keydown', function (e) {
+    events.push('key ' + e.keyCode + ' ' + e.key);
+    if (e.keyCode === 37) { focus = Math.max(0, focus - 1); paint(); e.preventDefault(); }
+    else if (e.keyCode === 39) { focus = Math.min(apps.length - 1, focus + 1); paint(); e.preventDefault(); }
+    else if (e.keyCode === 13) { launch(apps[focus]); e.preventDefault(); }
+    report();
+  });
+  document.addEventListener('visibilitychange', function () { log('visibility: ' + document.visibilityState); });
+  log('ready');
+})();
+</script>
+</body>
+</html>

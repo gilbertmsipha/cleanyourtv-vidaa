@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>CYT Probe 4</title>
+<style>
+  html, body { margin: 0; background: #000; color: #e8e8e8; font: 20px/1.35 sans-serif; }
+  body { padding: 40px 60px; }
+  h1 { font-size: 32px; margin: 0 0 16px; color: #cfffcf; }
+  pre { white-space: pre-wrap; word-break: break-all; font-size: 15px; margin: 0; }
+</style>
+</head>
+<body>
+<h1>Clean Your TV · which services exist (read-only)</h1>
+<pre id="out">asking…</pre>
+<script>
+(function () {
+  // Each service is asked for an API name that cannot exist, so nothing is executed; a missing service and an
+  // existing one that rejects the name answer differently.
+  var NOOP = '__cyt_probe_unknown__';
+  var names = ['pkgmgr', 'tvinfo', 'hiutils', 'appmgr', 'appmanager', 'app', 'apps', 'application', 'applauncher',
+    'launcher', 'launch', 'am', 'activity', 'appcontrol', 'system', 'sys', 'input', 'inputmgr', 'key', 'keymgr',
+    'keyevent', 'remote', 'rc', 'store', 'vidaa', 'browser', 'power', 'audio', 'sound', 'picture', 'network', 'source',
+    'channel', 'settings', 'setting', 'window', 'wm', 'ui', 'home', 'notification', 'media', 'player', 'dial', 'voice',
+    'account', 'jsservice', 'basic', 'osconfig', 'keystore', 'storage', 'file', 'log', 'event', 'bus', 'service'];
+  var r = { page: 'probe4', t: new Date().toString(), id: '', http: {}, get: {} };
+  try { r.id = vowOSContext.getAppIdentifier(); } catch (e) { r.id = 'err'; }
+
+  function post(name) {
+    try {
+      var x = new XMLHttpRequest();
+      x.open('POST', 'http://localhost:9009/service/' + name, false);
+      x.setRequestHeader('identifier', r.id);
+      x.send(JSON.stringify({ api: NOOP, args: '' }));
+      return x.status + ' ' + String(x.responseText).slice(0, 600);
+    } catch (e) { return 'threw: ' + e; }
+  }
+  function get(url) {
+    try {
+      var x = new XMLHttpRequest();
+      x.open('GET', url, false);
+      x.send();
+      return x.status + ' ' + String(x.responseText).slice(0, 1500);
+    } catch (e) { return 'threw: ' + e; }
+  }
+
+  names.forEach(function (n) { r.http[n] = post(n); });
+  r.get['9009 /'] = get('http://localhost:9009/');
+  r.get['9009 /service/'] = get('http://localhost:9009/service/');
+  r.get['9009 /service/pkgmgr'] = get('http://localhost:9009/service/pkgmgr');
+
+  document.getElementById('out').textContent = JSON.stringify(r, null, 1).slice(0, 8000);
+  var x = new XMLHttpRequest();
+  x.open('POST', '/report', true);
+  x.setRequestHeader('Content-Type', 'application/json');
+  x.send(JSON.stringify(r));
+})();
+</script>
+</body>
+</html>
