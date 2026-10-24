@@ -25,6 +25,7 @@ CleanYourTV works by talking to Android TVs over ADB: it disables junk apps and 
 | Inputs menu, Settings button | With the helper | The TV's own input list; Settings sends the remote's Menu key |
 | Remove apps from Home (hold OK) | Yes | Hidden from the launcher; the app stays installed |
 | Home appears when the TV is switched on, and when Netflix, YouTube or Prime Video closes | With the helper | The helper watches the TV and opens the launcher (VIDAA's home flashes for ~2 s first) |
+| Go back to VIDAA's own home | With the helper | **VIDAA** pill: *Switch to VIDAA Home* turns the automatic Home off; the same pill turns it back on |
 | Replace VIDAA's home outright | **No** | VIDAA has no setting for it; the Home button still goes to VIDAA's home |
 | Disable or uninstall the TV's own apps, telemetry or ads | **No** | No ADB on VIDAA. Uninstall apps on the TV itself; see [open problems](docs/OPEN-PROBLEMS.md) for ads and tracking |
 
@@ -124,6 +125,7 @@ A tile can't be changed once added (adding the same id again is ignored), so get
 | Arrows | Move the glass highlight; Down slides the grid up | Up reaches Inputs / Wi-Fi / Settings (with the helper) |
 | OK | Open the app | |
 | Hold OK | Menu: **Remove from Home**, **Restore removed apps** | |
+| VIDAA pill | | Switch back to VIDAA's own home (automatic Home off), or turn automatic Home back on. The choice is kept by the helper (`data/takeover.json`) |
 | Back | Back to the dock | Stays on Home |
 
 Removed apps are stored by the helper (`data/hidden.json`), or in the TV browser's storage on the hosted page without a helper. The remote's own Netflix/YouTube/Prime buttons work as always.

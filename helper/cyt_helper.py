@@ -33,6 +33,19 @@ DATA = ROOT / "data"
 ICONS = DATA / "icons"
 APPS_CACHE = DATA / "apps.json"
 HIDDEN_FILE = DATA / "hidden.json"
+TAKEOVER_FILE = DATA / "takeover.json"
+
+
+def takeover_on() -> bool:
+    """Whether the launcher takes over from VIDAA's home; switched from the launcher's VIDAA menu, kept on disk."""
+    if TAKEOVER_FILE.exists():
+        return bool(json.loads(TAKEOVER_FILE.read_text(encoding="utf-8")).get("on", True))
+    return CONFIG.get("home_takeover", True)
+
+
+def set_takeover(on: bool):
+    DATA.mkdir(exist_ok=True)
+    TAKEOVER_FILE.write_text(json.dumps({"on": on}), encoding="utf-8")
 ICON_HOSTS = ("img.vidaahub.com", "noobygains.github.io")
 # Remote keys the launcher's buttons may send; nothing else is forwarded.
 ALLOWED_KEYS = {"KEY_MENU", "KEY_HOME", "KEY_EXIT", "KEY_RETURNS", "KEY_INPUT", "KEY_SETTINGS"}
@@ -287,7 +300,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {"apps": APPS.for_launcher(), "dock_size": len(CONFIG.get("dock", [])),
                              "greeting_name": CONFIG.get("greeting_name", ""),
                              "clock_24h": CONFIG.get("clock_24h", False), "sources": SOURCES.get(),
-                             "removed_count": len(APPS.removed())})
+                             "removed_count": len(APPS.removed()), "takeover": takeover_on()})
             return
         if path == "/go":
             self._go()
@@ -328,6 +341,10 @@ class Handler(SimpleHTTPRequestHandler):
             back = "/"
         error, text, wait = "", "", 7000
         try:
+            if query.get("takeover") in ("on", "off"):
+                set_takeover(query["takeover"] == "on")
+                log("home takeover switched " + query["takeover"])
+                wait = 300
             if "app" in query:
                 app = APPS.get(query["app"])
                 if not app:
@@ -346,11 +363,11 @@ class Handler(SimpleHTTPRequestHandler):
                     TV.change_source(source)
                     log(f"switched to {source['sourceid']} via /go")
             elif query.get("key") in ALLOWED_KEYS:
-                # Menus open over the launcher, so go straight back to it.
+                # Menus open over the launcher, so go straight back to it (Home leaves the browser hidden, so it stays).
                 TV.send_key(query["key"])
                 log(f"sent {query['key']} via /go")
                 text, wait = "", 300
-            else:
+            elif "takeover" not in query:
                 error = "Unknown request."
         except Exception as e:
             log(f"/go failed: {e}")
@@ -535,6 +552,8 @@ class HomeWatch(threading.Thread):
 
     @staticmethod
     def open_launcher(why: str):
+        if not takeover_on():
+            return
         state_path = DATA / "helper_state.json"
         state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
         TV.launch({"appId": state.get("tile", "cythome"), "name": "Home",
@@ -604,9 +623,9 @@ def main():
         check_own_address()
     except Exception as e:
         log(f"address check failed: {e}")
-    if CONFIG.get("home_takeover", True):
-        HOME_WATCH.start()
-        log("home takeover on: the launcher opens when the TV comes on or Netflix, YouTube or Prime Video closes")
+    HOME_WATCH.start()
+    log("home takeover " + ("on" if takeover_on() else "off (VIDAA's own home)") +
+        ": the launcher opens when the TV comes on or Netflix, YouTube or Prime Video closes")
     port = int(CONFIG.get("port", 8765))
     server = ThreadingHTTPServer(("0.0.0.0", port), partial(Handler, directory=str(WEB)))
     log(f"launcher on http://<this computer's ip>:{port}/  (serving {WEB})")

@@ -91,7 +91,7 @@
   #inputs .row.focus { background: rgba(255,255,255,.96); color: #111; }
 
   /* Hold OK on a tile: the tile menu, the same glass panel in the middle of the screen. */
-  #menu { position: absolute; left: 50%; top: 50%; width: 760px; padding: 16px; border-radius: 40px; z-index: 7;
+  #menu { position: absolute; left: 50%; top: 50%; width: 920px; padding: 16px; border-radius: 40px; z-index: 7;
           background: linear-gradient(180deg, #2a2a2e, #161618); border: 2px solid rgba(255,255,255,.2);
           box-sizing: border-box; opacity: 0; transform: translate(-50%, -46%) scale(.98); pointer-events: none;
           transition: opacity .2s ease, transform .2s ease; }
@@ -122,6 +122,7 @@
     <div class="pill" data-action="inputs"><svg viewBox="0 0 24 24"><path d="M8 2h8v6h2v6a6 6 0 0 1-5 5.9V22h-2v-2.1A6 6 0 0 1 6 14V8h2V2zm2 2v4h4V4h-4z"/></svg>Inputs</div>
     <div class="pill" data-action="network" id="netPill"><svg viewBox="0 0 24 24"><path d="M12 18.5a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5zM12 13c2.3 0 4.4.9 6 2.4l-1.7 1.7A6.2 6.2 0 0 0 12 15.4c-1.7 0-3.2.6-4.3 1.7L6 15.4A8.6 8.6 0 0 1 12 13zm0-5c3.7 0 7.1 1.5 9.6 3.9l-1.7 1.7A11.2 11.2 0 0 0 12 10.4c-3 0-5.8 1.2-7.9 3.2l-1.7-1.7C4.9 9.5 8.3 8 12 8zm0-5c5.1 0 9.8 2 13.2 5.4l-1.7 1.7A16.3 16.3 0 0 0 12 5.4C7.5 5.4 3.4 7.2.5 10.1L-1.2 8.4C2.2 5 6.9 3 12 3z" transform="scale(.92) translate(1 0)"/></svg><span id="netLabel">Wi-Fi</span></div>
     <div class="pill" data-action="settings"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1l.4 2.6h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>Settings</div>
+    <div class="pill" data-action="vidaa"><svg viewBox="0 0 24 24"><path d="M12 3 2 11.5h3V21h5.5v-6h3v6H19v-9.5h3L12 3z"/></svg>VIDAA</div>
   </div>
 </div>
 
@@ -148,7 +149,7 @@
   // Two modes. With the helper (/api/state answers), it launches any app over the TV's remote-control channel.
   // Static (apps.json, ?static=1 to force): it opens web apps by loading their address, which needs nothing but
   // the page; colours are precomputed, since the browser may not read VIDAA's icons.
-  var state = { apps: [], dockSize: 4, clock24: false, greetingName: '', static: false, removedCount: 0, loaded: null };
+  var state = { apps: [], dockSize: 4, clock24: false, greetingName: '', static: false, removedCount: 0, loaded: null, takeover: true };
   var focus = { area: 'dock', index: 0, pill: 2, input: 0 };
   var tiles = [], names = [], colours = {};
   var $ = function (id) { return document.getElementById(id); };
@@ -285,7 +286,7 @@
   function paintGlass() { $('glass').style.transform = 'translate(' + spring.x + 'px,' + spring.y + 'px)'; }
 
   // ---------- focus ----------
-  function onTop() { return focus.area === 'pills' || focus.area === 'inputs'; }
+  function onTop() { return focus.area === 'pills' || focus.area === 'inputs' || (focus.area === 'menu' && menu.kind === 'vidaa'); }
   function focused() { return onTop() ? null : state.apps[focus.index]; }
 
   function render() {
@@ -371,23 +372,42 @@
 
   // ---------- tile menu: remove an app from Home, or bring removed ones back ----------
   // Removed apps stay installed on the TV. With the helper the list lives there; without it, in this browser.
-  var menu = { items: [], index: 0, app: null };
+  var menu = { items: [], index: 0, app: null, kind: 'tile' };
   function localRemoved() { try { return JSON.parse(localStorage.getItem('cyt-removed') || '[]'); } catch (e) { return []; } }
   function saveLocalRemoved(ids) { try { localStorage.setItem('cyt-removed', JSON.stringify(ids)); } catch (e) {} }
 
+  function showMenu(title, items) {
+    menu.items = items; menu.index = 0;
+    var box = $('menu');
+    box.innerHTML = '<div class="title"></div>';
+    box.firstChild.textContent = title;
+    items.forEach(function (it) { var r = document.createElement('div'); r.className = 'row'; r.textContent = it.label; box.appendChild(r); });
+    focus.area = 'menu';
+    renderMenu(); render();
+  }
   function openMenu() {
     var app = focused();
     if (!app) return;
-    menu.app = app; menu.index = 0;
-    menu.items = [{ label: 'Remove from Home', act: 'remove' }];
-    if (state.removedCount) menu.items.push({ label: 'Restore removed apps (' + state.removedCount + ')', act: 'restore' });
-    menu.items.push({ label: 'Cancel', act: 'cancel' });
-    var box = $('menu');
-    box.innerHTML = '<div class="title"></div>';
-    box.firstChild.textContent = app.name;
-    menu.items.forEach(function (it) { var r = document.createElement('div'); r.className = 'row'; r.textContent = it.label; box.appendChild(r); });
-    focus.area = 'menu';
-    renderMenu();
+    menu.app = app; menu.kind = 'tile';
+    var items = [{ label: 'Remove from Home', act: 'remove' }];
+    if (state.removedCount) items.push({ label: 'Restore removed apps (' + state.removedCount + ')', act: 'restore' });
+    items.push({ label: 'Cancel', act: 'cancel' });
+    showMenu(app.name, items);
+  }
+
+  // ---------- VIDAA menu: back to VIDAA's own home, and the automatic takeover on or off ----------
+  // The helper keeps the setting; this page only knows it from the helper (live) or its own last change (hosted).
+  function takeoverKnown() {
+    if (!state.static) return state.takeover;
+    try { return localStorage.getItem('cyt-takeover') !== 'off'; } catch (e) { return true; }
+  }
+  function openVidaaMenu() {
+    menu.kind = 'vidaa';
+    var on = takeoverKnown();
+    showMenu('Automatic Home is ' + (on ? 'on' : 'off'), on
+      ? [{ label: 'Switch to VIDAA Home (turns automatic Home off)', act: 'vidaa-off' }, { label: 'Cancel', act: 'cancel' }]
+      : [{ label: 'Turn automatic Home back on', act: 'takeover-on' }, { label: 'Go to VIDAA Home', act: 'vidaa-home' },
+         { label: 'Cancel', act: 'cancel' }]);
   }
   function renderMenu() {
     var box = $('menu'), rows = box.querySelectorAll('.row');
@@ -395,11 +415,21 @@
     $('scrim').classList.toggle('on', focus.area === 'menu');
     for (var i = 0; i < rows.length; i++) rows[i].classList.toggle('focus', i === menu.index);
   }
-  function closeMenu() { focus.area = focus.index < state.dockSize ? 'dock' : 'grid'; renderMenu(); }
+  function closeMenu() {
+    focus.area = menu.kind === 'vidaa' ? 'pills' : focus.index < state.dockSize ? 'dock' : 'grid';
+    menu.kind = 'tile';
+    renderMenu(); render();
+  }
   function menuChoose() {
     var it = menu.items[menu.index], app = menu.app;
     closeMenu();
     if (!it || it.act === 'cancel') return;
+    if (it.act === 'vidaa-off' || it.act === 'takeover-on' || it.act === 'vidaa-home') {
+      var on = it.act === 'takeover-on';
+      if (it.act !== 'vidaa-home') { try { localStorage.setItem('cyt-takeover', on ? 'on' : 'off'); } catch (e) {} state.takeover = on; }
+      viaHelper(it.act === 'takeover-on' ? 'takeover=on' : it.act === 'vidaa-off' ? 'takeover=off&key=KEY_HOME' : 'key=KEY_HOME');
+      return;
+    }
     if (state.static) {
       saveLocalRemoved(it.act === 'restore' ? [] : localRemoved().concat([app.appId]));
       start(state.loaded);
@@ -421,6 +451,7 @@
     if (focus.area === 'pills') {
       var action = document.querySelectorAll('.pill')[focus.pill].getAttribute('data-action');
       if (action === 'inputs') openInputs();
+      else if (action === 'vidaa') openVidaaMenu();
       else viaHelper('key=KEY_MENU');
       return;
     }
@@ -499,6 +530,7 @@
     state.loaded = s;
     var apps = s.apps || [], dockSize = s.dock_size;
     state.removedCount = s.removed_count || 0;
+    if (typeof s.takeover === 'boolean') state.takeover = s.takeover;
     if (state.static) {
       var removed = localRemoved();
       apps = apps.filter(function (a) { return removed.indexOf(a.appId) < 0; });
