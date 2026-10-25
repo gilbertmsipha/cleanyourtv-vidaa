@@ -69,8 +69,10 @@ def main():
     with urllib.request.urlopen(HELPER + "/api/sources", timeout=20) as r:
         sources = [{"id": s["sourceid"], "name": s.get("displayname", s["sourceid"]).replace("▶", "").strip()}
                    for s in json.load(r)["sources"]]
+    # The TV Browser becomes the Browser tile, which needs the helper to hand it a search.
+    browser_ids = [str(a["appId"]) for a in apps if a.get("url") == "browser"]
     keep = [a for a in apps if str(a.get("appId")) not in hidden and not str(a.get("appId")).startswith("cyt") and
-            (str(a.get("url", "")).startswith(("http://", "https://")) or str(a.get("appId")) in native)]
+            (str(a.get("url", "")).startswith(("http://", "https://")) or str(a.get("appId")) in native + browser_ids)]
 
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -83,7 +85,9 @@ def main():
     for a in keep:
         entry = {"appId": str(a["appId"]), "name": a.get("name", "").replace("▶", "").split(" : ")[0].strip(),
                  "icon": icon_url(a)}
-        if str(a["appId"]) in native:
+        if str(a["appId"]) in browser_ids:
+            entry.update(name="Browser", native=True, browser=True)
+        elif str(a["appId"]) in native:
             entry["native"] = True
         elif str(a["appId"]) in helper_first:
             entry["helperFirst"] = True
@@ -95,7 +99,7 @@ def main():
     data = {"apps": out,
             "dock": [str(x) for x in CONFIG.get("static_dock", [])],
             "helper_dock": [str(x) for x in CONFIG.get("helper_dock", [])],
-            "sources": sources,
+            "sources": sources, "browser": CONFIG.get("browser") or {},
             "greeting_name": CONFIG.get("greeting_name", ""), "clock_24h": CONFIG.get("clock_24h", False)}
     (ROOT / "web" / "apps.json").write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
     print(f"web/apps.json: {len(out)} apps, {sum(1 for e in out if e.get('native'))} of them native")

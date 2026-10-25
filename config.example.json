@@ -14,6 +14,8 @@
   "prefer_native_with_helper": ["3"],
   "hidden": ["166"],
   "stremio": {"app_id": "stremiodebug", "web_app": "https://noobygains.github.io/stremio-vidaa-tv/", "server": true},
+  "browser": {"search": "https://search.brave.com/search?q=%s", "region": "za-en",
+              "links": [{"name": "Brave Search", "url": "https://search.brave.com/"}, {"name": "Wikipedia", "url": "https://www.wikipedia.org/"}]},
   "greeting_name": "",
   "clock_24h": false,
   "home_takeover": true,

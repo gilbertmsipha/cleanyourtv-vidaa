@@ -38,6 +38,7 @@
           border: 2px solid rgba(255,255,255,.22);
           transition: transform .2s ease, background-color .2s ease; }
   .pill svg { width: 40px; height: 40px; fill: currentColor; }
+  .pill.round { width: 84px; padding: 0; justify-content: center; }
   .pill.focus { background: rgba(255,255,255,.96); color: #111; border-color: transparent; transform: scale(1.06); }
 
   /* Everything below the header scrolls in one rail; the viewport clips it under the header with a soft fade. */
@@ -103,6 +104,34 @@
                font-size: 32px; color: rgba(255,255,255,.88); transition: background-color .15s ease; }
   #menu .row.focus { background: rgba(255,255,255,.96); color: #111; }
 
+  /* Browser: type with the remote, search with Brave, and the result opens in the TV Browser, which has a pointer. */
+  #browser { position: absolute; inset: 0; z-index: 8; opacity: 0; pointer-events: none; transition: opacity .22s ease;
+             background: radial-gradient(circle 1300px at 22% 18%, rgba(251,84,43,.2), rgba(251,84,43,0) 70%), #060607; }
+  #browser.open { opacity: 1; }
+  #browser .label { position: absolute; font-size: 26px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+  #field { position: absolute; left: 160px; top: 120px; width: 1600px; height: 112px; padding: 0 48px; border-radius: 56px; box-sizing: border-box;
+           display: flex; align-items: center; gap: 28px; font-size: 44px; white-space: nowrap; overflow: hidden;
+           background: rgba(255,255,255,.1); border: 2px solid rgba(255,255,255,.25); }
+  #field svg { width: 48px; height: 48px; flex: none; fill: rgba(255,255,255,.6); }
+  #query.empty { color: rgba(255,255,255,.4); }
+  #caret { width: 3px; height: 54px; margin-left: -24px; background: #fff; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .key { position: absolute; height: 88px; border-radius: 24px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+         font-size: 38px; background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.1);
+         transition: transform .15s ease, background-color .15s ease; }
+  .key.word { font-size: 30px; font-weight: 500; }
+  .key.go { background: #fb542b; border-color: transparent; }
+  .key.focus { background: rgba(255,255,255,.96); color: #111; transform: scale(1.08); }
+  #suggest .row, #links .chip { transition: background-color .15s ease, transform .15s ease; }
+  #suggest .row { height: 80px; padding: 0 28px; border-radius: 26px; display: flex; align-items: center; font-size: 32px;
+                  color: rgba(255,255,255,.88); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #suggest .row.focus { background: rgba(255,255,255,.96); color: #111; }
+  #links { position: absolute; left: 160px; top: 872px; display: flex; gap: 20px; }
+  #links .chip { height: 80px; padding: 0 34px; border-radius: 40px; display: flex; align-items: center; font-size: 30px; font-weight: 500;
+                 background: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.07)); border: 2px solid rgba(255,255,255,.2); }
+  #links .chip.focus { background: rgba(255,255,255,.96); color: #111; border-color: transparent; transform: scale(1.06); }
+  #browser .hint { position: absolute; left: 160px; top: 1000px; font-size: 24px; color: rgba(255,255,255,.45); }
+
   #toast { position: absolute; left: 50%; bottom: 60px; transform: translate(-50%, 20px); padding: 22px 40px; border-radius: 40px;
            background: rgba(30,30,34,.92); border: 2px solid rgba(255,255,255,.15); font-size: 28px; opacity: 0;
            transition: opacity .3s ease, transform .3s ease; z-index: 5; white-space: nowrap; }
@@ -119,6 +148,7 @@
     <div id="clockRow"><div id="clock"></div><div id="ampm"></div><div id="divider"></div><div id="date"></div></div>
   </div>
   <div id="pills">
+    <div class="pill round" data-action="search"><svg viewBox="0 0 24 24"><path d="M10 3a7 7 0 0 1 5.6 11.2l5.6 5.6-1.4 1.4-5.6-5.6A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></svg></div>
     <div class="pill" data-action="inputs"><svg viewBox="0 0 24 24"><path d="M8 2h8v6h2v6a6 6 0 0 1-5 5.9V22h-2v-2.1A6 6 0 0 1 6 14V8h2V2zm2 2v4h4V4h-4z"/></svg>Inputs</div>
     <div class="pill" data-action="network" id="netPill"><svg viewBox="0 0 24 24"><path d="M12 18.5a1.75 1.75 0 1 1 0 3.5 1.75 1.75 0 0 1 0-3.5zM12 13c2.3 0 4.4.9 6 2.4l-1.7 1.7A6.2 6.2 0 0 0 12 15.4c-1.7 0-3.2.6-4.3 1.7L6 15.4A8.6 8.6 0 0 1 12 13zm0-5c3.7 0 7.1 1.5 9.6 3.9l-1.7 1.7A11.2 11.2 0 0 0 12 10.4c-3 0-5.8 1.2-7.9 3.2l-1.7-1.7C4.9 9.5 8.3 8 12 8zm0-5c5.1 0 9.8 2 13.2 5.4l-1.7 1.7A16.3 16.3 0 0 0 12 5.4C7.5 5.4 3.4 7.2.5 10.1L-1.2 8.4C2.2 5 6.9 3 12 3z" transform="scale(.92) translate(1 0)"/></svg><span id="netLabel">Wi-Fi</span></div>
     <div class="pill" data-action="settings"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3.3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1l.4 2.6h4l.4-2.6c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z" transform="translate(-1 0)"/></svg>Settings</div>
@@ -137,6 +167,16 @@
 <div id="inputs"></div>
 <div id="scrim"></div>
 <div id="menu"></div>
+<div id="browser">
+  <div class="label" style="left:186px;top:66px">Search with Brave</div>
+  <div id="field"><svg viewBox="0 0 24 24"><path d="M10 3a7 7 0 0 1 5.6 11.2l5.6 5.6-1.4 1.4-5.6-5.6A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></svg><span id="query"></span><span id="caret"></span></div>
+  <div id="keys"></div>
+  <div class="label" id="suggestLabel" style="left:1348px;top:282px"></div>
+  <div id="suggest" style="position:absolute;left:1320px;top:326px;width:440px"></div>
+  <div class="label" style="left:186px;top:828px">Quick links</div>
+  <div id="links"></div>
+  <div class="hint">Pages open in the TV Browser, where the remote moves a pointer. To come back, press Home and open the Home tile.</div>
+</div>
 <div id="toast"></div>
 
 <script>
@@ -150,7 +190,7 @@
   // Static (apps.json, ?static=1 to force): it opens web apps by loading their address, which needs nothing but
   // the page; colours are precomputed, since the browser may not read VIDAA's icons.
   var state = { apps: [], dockSize: 4, clock24: false, greetingName: '', static: false, removedCount: 0, loaded: null, takeover: true };
-  var focus = { area: 'dock', index: 0, pill: 2, input: 0 };
+  var focus = { area: 'dock', index: 0, pill: 0, input: 0 };
   var tiles = [], names = [], colours = {};
   var $ = function (id) { return document.getElementById(id); };
 
@@ -165,7 +205,12 @@
     var h = d.getHours(), m = ('0' + d.getMinutes()).slice(-2);
     if (state.clock24) { $('clock').textContent = ('0' + h).slice(-2) + ':' + m; $('ampm').textContent = ''; }
     else { $('clock').textContent = ((h % 12) || 12) + ':' + m; $('ampm').textContent = h < 12 ? 'am' : 'pm'; }
-    $('date').innerHTML = DAYS[d.getDay()] + '&nbsp;&nbsp;' + d.getDate() + ' ' + MONTHS[d.getMonth()];
+    // The date shortens (Wed, then Sep) only when it would run under the pills.
+    var day = DAYS[d.getDay()], month = MONTHS[d.getMonth()], pills = $('pills');
+    for (var fit = 0; fit < 3; fit++) {
+      $('date').innerHTML = (fit ? day.slice(0, 3) : day) + '&nbsp;&nbsp;' + d.getDate() + ' ' + (fit > 1 ? month.slice(0, 3) : month);
+      if (!pills.offsetWidth || $('date').getBoundingClientRect().right + 24 <= pills.getBoundingClientRect().left) break;
+    }
     var g = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
     $('greeting').textContent = state.greetingName ? g + ', ' + state.greetingName : g;
   }
@@ -450,7 +495,8 @@
     }
     if (focus.area === 'pills') {
       var action = document.querySelectorAll('.pill')[focus.pill].getAttribute('data-action');
-      if (action === 'inputs') openInputs();
+      if (action === 'search') openBrowser();
+      else if (action === 'inputs') openInputs();
       else if (action === 'vidaa') openVidaaMenu();
       else viaHelper('key=KEY_MENU');
       return;
@@ -459,6 +505,7 @@
     if (!app) return;
     t.classList.add('press');
     setTimeout(function () { t.classList.remove('press'); }, 160);
+    if (app.browser) { openBrowser(); return; }
     if (state.static) {
       // A native app needs the helper. This https page may not call a LAN http address, but it may navigate to
       // one: the helper opens the app and sends the browser back here. An app that works better through the helper
@@ -493,6 +540,7 @@
 
   document.addEventListener('keydown', function (e) {
     var k = e.keyCode, handled = true;
+    if (focus.area === 'browser') { browserKey(e); return; }
     if (focus.area === 'menu') {
       if (k === 38 || k === 40) { menu.index = Math.max(0, Math.min(menu.items.length - 1, menu.index + (k === 40 ? 1 : -1))); renderMenu(); }
       else if (k === 13 && !e.repeat) activate();
@@ -519,8 +567,181 @@
     if (handled) e.preventDefault();
   });
 
+  // ---------- Browser: an on-screen keyboard, Brave's suggestions, recent searches and quick links ----------
+  // A search opens in the TV Browser through the helper: a page opened as an app (this one) gets only arrow-key
+  // focus, which can't click around a website, and the TV Browser has a pointer. Without a helper the page goes there itself.
+  var BRAVE = 'https://search.brave.com/search?q=%s';
+  var LINKS = [{ name: 'Brave Search', url: 'https://search.brave.com/' }, { name: 'Wikipedia', url: 'https://www.wikipedia.org/' },
+               { name: 'News24', url: 'https://www.news24.com/' }, { name: 'BBC News', url: 'https://www.bbc.com/news' },
+               { name: 'Weather', url: 'https://search.brave.com/search?q=weather' }];
+  var KEY_UNIT = 112, KEY_LEFT = 160, KEY_TOP = 280, KEY_PITCH = 100;
+  var KEY_ROWS = ['1234567890', 'qwertyuiop', 'asdfghjkl-', 'zxcvbnm./'].map(function (r) {
+    return r.split('').map(function (c) { return { label: c, ch: c, w: 1 }; });
+  });
+  KEY_ROWS[3].push({ label: '.com', ch: '.com', w: 1, word: true });
+  KEY_ROWS.push([{ label: 'Space', ch: ' ', w: 3, word: true }, { label: 'Delete', act: 'del', w: 2, word: true },
+                 { label: 'Clear', act: 'clear', w: 2, word: true }, { label: 'Search', act: 'go', w: 3, word: true }]);
+  var browser = { open: false, q: '', area: 'keys', row: 1, col: 0, unit: 0, s: 0, l: 0, list: [], kind: 'recent', built: false };
+
+  function recent() { try { return JSON.parse(localStorage.getItem('cyt-recent') || '[]'); } catch (e) { return []; } }
+  function remember(q) {
+    var list = recent().filter(function (x) { return x !== q; });
+    list.unshift(q);
+    try { localStorage.setItem('cyt-recent', JSON.stringify(list.slice(0, 7))); } catch (e) {}
+  }
+  function links() { return (state.browserCfg && state.browserCfg.links) || LINKS; }
+
+  function buildBrowser() {
+    var box = $('keys');
+    KEY_ROWS.forEach(function (row, r) {
+      var unit = 0;
+      row.forEach(function (k) {
+        k.x = unit; unit += k.w;
+        var el = document.createElement('div');
+        el.className = 'key' + (k.word ? ' word' : '') + (k.act === 'go' ? ' go' : '');
+        el.textContent = k.label;
+        el.style.left = (KEY_LEFT + k.x * KEY_UNIT) + 'px'; el.style.top = (KEY_TOP + r * KEY_PITCH) + 'px';
+        el.style.width = (k.w * KEY_UNIT - 12) + 'px';
+        box.appendChild(el); k.el = el;
+      });
+    });
+    links().forEach(function (l) {
+      var c = document.createElement('div'); c.className = 'chip'; c.textContent = l.name; $('links').appendChild(c);
+    });
+    browser.built = true;
+  }
+
+  function renderBrowser() {
+    $('browser').classList.toggle('open', browser.open);
+    var q = browser.q;
+    $('query').textContent = q ? (q.length > 52 ? '…' + q.slice(-51) : q) : 'Search or type a web address';
+    $('query').classList.toggle('empty', !q);
+    KEY_ROWS.forEach(function (row, r) {
+      row.forEach(function (k, c) { k.el.classList.toggle('focus', browser.area === 'keys' && r === browser.row && c === browser.col); });
+    });
+    var box = $('suggest');
+    box.innerHTML = '';
+    browser.list.forEach(function (text, i) {
+      var r = document.createElement('div');
+      r.className = 'row' + (browser.area === 'suggest' && i === browser.s ? ' focus' : '');
+      r.textContent = text; box.appendChild(r);
+    });
+    $('suggestLabel').textContent = !browser.list.length ? '' : browser.kind === 'recent' ? 'Recent' : 'Suggestions';
+    var chips = $('links').children;
+    for (var i = 0; i < chips.length; i++) chips[i].classList.toggle('focus', browser.area === 'links' && i === browser.l);
+  }
+
+  var suggestTimer = 0, suggestSeq = 0;
+  function refreshSuggestions() {
+    clearTimeout(suggestTimer);
+    var q = browser.q, seq = ++suggestSeq;
+    if (!q.trim()) { browser.list = recent(); browser.kind = 'recent'; fixFocus(); renderBrowser(); return; }
+    suggestTimer = setTimeout(function () {
+      var region = (state.browserCfg && state.browserCfg.region) || '';
+      load('/api/suggest?q=' + encodeURIComponent(q) + '&kl=' + encodeURIComponent(region)).then(function (list) {
+        if (seq !== suggestSeq || !list || !list.slice) return;
+        browser.list = list.slice(0, 7); browser.kind = 'suggest'; fixFocus(); renderBrowser();
+      }, function () {});
+    }, 250);
+  }
+  function fixFocus() {
+    if (browser.area !== 'suggest') return;
+    if (!browser.list.length) browser.area = 'keys';
+    else browser.s = Math.min(browser.s, browser.list.length - 1);
+  }
+
+  function openBrowser() {
+    if (!browser.built) buildBrowser();
+    browser.open = true; browser.area = 'keys'; browser.row = 1; browser.col = 0; browser.unit = 0;
+    focus.beforeBrowser = focus.area; focus.area = 'browser';
+    refreshSuggestions(); renderBrowser();
+  }
+  function closeBrowser() {
+    browser.open = false;
+    focus.area = focus.beforeBrowser || 'dock';
+    renderBrowser(); render();
+  }
+
+  // Words go to Brave; something that looks like an address (bbc.com, https://…) opens as it is.
+  function addressFor(text) {
+    if (/^https?:\/\//i.test(text)) return text;
+    if (/^[\w-]+(\.[\w-]+)*\.[a-z]{2,}(:\d+)?(\/\S*)?$/i.test(text)) return 'https://' + text;
+    if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/\S*)?$/.test(text)) return 'http://' + text;   // a router's page and the like
+    return ((state.browserCfg && state.browserCfg.search) || BRAVE).replace('%s', encodeURIComponent(text));
+  }
+  function openPage(url) {
+    browser.q = '';   // next time the screen opens on the recent searches
+    closeBrowser();
+    if (!state.static) {
+      post('/api/browse', { url: url }).then(function (r) {
+        if (!r.ok) toast('Could not open the TV Browser' + (r.error ? ': ' + r.error : ''));
+      }, function () { toast('Cannot reach the helper, so the TV Browser did not open'); });
+    } else if (state.helper) viaHelper('browse=' + encodeURIComponent(url));
+    else setTimeout(function () { location.href = url; }, 120);
+  }
+  function search(text) {
+    text = text.replace(/^\s+|\s+$/g, '');
+    if (!text) { toast('Type something to search for'); return; }
+    remember(text);
+    openPage(addressFor(text));
+  }
+  function type(ch) {
+    if (browser.q.length < 200) browser.q += ch;
+    refreshSuggestions(); renderBrowser();
+  }
+
+  function browserMove(dx, dy) {
+    var rows = KEY_ROWS;
+    if (browser.area === 'keys') {
+      var row = rows[browser.row];
+      if (dx) {
+        var c = browser.col + dx;
+        if (c >= row.length) { if (browser.list.length) { browser.area = 'suggest'; browser.s = 0; } }
+        else browser.col = Math.max(0, c);
+        browser.unit = row[browser.col].x;
+      }
+      if (dy) {
+        var r = browser.row + dy;
+        if (r >= rows.length) { browser.area = 'links'; browser.l = Math.min(browser.l, links().length - 1); }
+        else if (r >= 0) {
+          browser.row = r;
+          var u = browser.unit, keys = rows[r];
+          browser.col = 0;
+          for (var i = 0; i < keys.length; i++) if (keys[i].x <= u) browser.col = i;
+        }
+      }
+    } else if (browser.area === 'suggest') {
+      if (dy) browser.s = Math.max(0, Math.min(browser.list.length - 1, browser.s + dy));
+      if (dx < 0) { browser.area = 'keys'; browser.col = rows[browser.row].length - 1; browser.unit = rows[browser.row][browser.col].x; }
+    } else if (browser.area === 'links') {
+      if (dx) browser.l = Math.max(0, Math.min(links().length - 1, browser.l + dx));
+      if (dy < 0) { browser.area = 'keys'; browser.row = rows.length - 1; browser.col = 0; browser.unit = 0; }
+    }
+    renderBrowser();
+  }
+  function browserChoose() {
+    if (browser.area === 'suggest') { var t = browser.list[browser.s]; if (t) { browser.q = t; search(t); } return; }
+    if (browser.area === 'links') { var l = links()[browser.l]; if (l) openPage(l.url); return; }
+    var k = KEY_ROWS[browser.row][browser.col];
+    if (k.ch) type(k.ch);
+    else if (k.act === 'del') { browser.q = browser.q.slice(0, -1); refreshSuggestions(); renderBrowser(); }
+    else if (k.act === 'clear') { browser.q = ''; refreshSuggestions(); renderBrowser(); }
+    else search(browser.q);
+  }
+  function browserKey(e) {
+    var k = e.keyCode;
+    if (k === 37 || k === 39) browserMove(k === 39 ? 1 : -1, 0);
+    else if (k === 38 || k === 40) browserMove(0, k === 40 ? 1 : -1);
+    else if (k === 13) { if (!e.repeat || browser.area === 'keys') browserChoose(); }
+    else if (k === 8 || k === 461 || k === 27) closeBrowser();
+    else if (e.key && e.key.length === 1) type(e.key);   // a keyboard, or a phone remote's typing
+    else return;
+    e.preventDefault();
+  }
+
   // ---------- start ----------
   tick(); setInterval(tick, 1000); network();
+  if (document.fonts) document.fonts.ready.then(function () { lastMinute = -1; tick(); });   // the date's fit, in the real font
   function load(url) { return fetch(url, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw r.status; return r.json(); }); }
   // ?helper=http://<lan ip>:8765 in the tile's address: native apps are shown and opened through that helper.
   var helperArg = /[?&]helper=([^&]+)/.exec(location.search);
@@ -547,6 +768,7 @@
     state.dockSize = Math.min(dockSize || 4, COLS, state.apps.length);
     state.clock24 = !!s.clock_24h; state.greetingName = s.greeting_name || '';
     state.sources = s.sources || [];
+    state.browserCfg = s.browser || {};
     document.body.classList.toggle('static', state.static);
     document.body.classList.toggle('helper', !!state.helper);
     try {

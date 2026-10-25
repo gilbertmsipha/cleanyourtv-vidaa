@@ -213,8 +213,14 @@ class Apps:
         dock = [str(x) for x in CONFIG.get("dock", [])]
         order = {app_id: i for i, app_id in enumerate(dock)}
         apps.sort(key=lambda a: order.get(str(a.get("appId")), len(order)))
-        return [{"appId": str(a["appId"]), "name": a.get("name", "").replace("▶", "").strip(),
-                 "icon": f"/icon/{a['appId']}"} for a in apps]
+        out = []
+        for a in apps:
+            entry = {"appId": str(a["appId"]), "name": a.get("name", "").replace("▶", "").strip(),
+                     "icon": f"/icon/{a['appId']}"}
+            if a.get("url") == "browser":  # the launcher's Browser screen, which hands its searches to this app
+                entry.update(name="Browser", browser=True)
+            out.append(entry)
+        return out
 
 
 APPS = Apps()
@@ -237,6 +243,34 @@ class Sources:
 
 
 SOURCES = Sources()
+
+
+# The launcher's Browser screen searches with Brave and opens the results in the TV Browser: a page opened as an app
+# only gets arrow-key focus, but the TV Browser has a pointer for clicking around websites.
+BROWSER = CONFIG.get("browser") or {}
+# Suggestions as you type come from DuckDuckGo: Brave's feed answers only Brave's pages and turns scripts away (429).
+SUGGEST = "https://duckduckgo.com/ac/?type=list&q="
+
+
+def browse(url: str):
+    if urlsplit(url).scheme not in ("http", "https"):
+        raise ValueError("only web addresses can be opened")
+    app = next((a for a in APPS.apps if a.get("url") == "browser"), {"appId": "16", "name": "TV Browser"})
+    TV.launch(dict(app, url=url))
+
+
+def suggestions(q: str, region: str = "") -> list:
+    """Search suggestions for the Browser screen, which may not ask the feed itself (no CORS)."""
+    if not q.strip():
+        return []
+    region = region or BROWSER.get("region", "")  # a DuckDuckGo region code, such as za-en
+    req = urllib.request.Request(SUGGEST + quote(q[:200]) + "&kl=" + quote(region[:10]), headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=3) as r:
+            found = json.load(r)[1]
+    except Exception:
+        return []
+    return [s for s in found if isinstance(s, str)][:8]
 
 
 STREMIO = CONFIG.get("stremio") or {}
@@ -462,7 +496,11 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {"apps": APPS.for_launcher(), "dock_size": len(CONFIG.get("dock", [])),
                              "greeting_name": CONFIG.get("greeting_name", ""),
                              "clock_24h": CONFIG.get("clock_24h", False), "sources": SOURCES.get(),
-                             "removed_count": len(APPS.removed()), "takeover": takeover_on()})
+                             "removed_count": len(APPS.removed()), "takeover": takeover_on(), "browser": BROWSER})
+            return
+        if path == "/api/suggest":
+            query = parse_qs(urlsplit(self.path).query)
+            self._json(200, suggestions(query.get("q", [""])[0], query.get("kl", [""])[0]))
             return
         if path == "/go":
             self._go()
@@ -514,7 +552,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def _go(self):
-        """GET /go?app=ID | ?source=ID | ?key=KEY, plus &back=URL. The https launcher navigates here, since it may
+        """GET /go?app=ID | ?source=ID | ?browse=URL | ?key=KEY, plus &back=URL. The https launcher navigates here, since it may
         not fetch a LAN http address but may navigate to one. Shows a black page while the TV acts, then returns to
         back if nothing took over the screen."""
         query = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()}
@@ -545,6 +583,10 @@ class Handler(SimpleHTTPRequestHandler):
                     text = "Switching to " + source.get("displayname", source["sourceid"]).replace("▶", "").strip() + "…"
                     TV.change_source(source)
                     log(f"switched to {source['sourceid']} via /go")
+            elif "browse" in query:
+                text = "Opening the TV Browser…"
+                browse(query["browse"])
+                log("opened the TV Browser via /go")
             elif query.get("key") in ALLOWED_KEYS:
                 # Menus open over the launcher, so go straight back to it (Home leaves the browser hidden, so it stays).
                 TV.send_key(query["key"])
@@ -585,6 +627,11 @@ setTimeout(function () {{ if (document.visibilityState === 'visible') location.r
                 TV.launch(launch_target(app))
                 HOME_WATCH.opened(str(app.get("appId")))
                 log(f"launched {app.get('name')} in {int((time.time() - t) * 1000)} ms")
+                self._json(200, {"ok": True})
+                return
+            if path == "/api/browse":
+                browse(str(data.get("url", "")))
+                log("opened the TV Browser")
                 self._json(200, {"ok": True})
                 return
             if path == "/api/key":

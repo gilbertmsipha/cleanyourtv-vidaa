@@ -26,6 +26,7 @@ CleanYourTV works by talking to Android TVs over ADB: it disables junk apps and 
 | Remove apps from Home (hold OK) | Yes | Hidden from the launcher; the app stays installed |
 | Home appears when the TV is switched on, and when Netflix, YouTube or Prime Video closes | With the helper | The helper watches the TV and opens the launcher (VIDAA's home flashes for ~2 s first) |
 | Stremio with your addons, torrents and transcoding | With the helper | The helper serves [Stremio for VIDAA](https://github.com/NoobyGains/stremio-vidaa-tv) itself and keeps Stremio's streaming server running ([below](#stremio)) |
+| A browser: search with Brave, open websites | With the helper | The Search pill (or the Browser tile) types with the remote, shows suggestions as you type, then opens the page in the TV Browser ([below](#browser)) |
 | Go back to VIDAA's own home | With the helper | **VIDAA** pill: *Switch to VIDAA Home* turns the automatic Home off; the same pill turns it back on |
 | Replace VIDAA's home outright | **No** | VIDAA has no setting for it; the Home button still goes to VIDAA's home |
 | Disable or uninstall the TV's own apps, telemetry or ads | **No** | No ADB on VIDAA. Uninstall apps on the TV itself; see [open problems](docs/OPEN-PROBLEMS.md) for ads and tracking |
@@ -93,6 +94,7 @@ On first run Windows asks whether to allow Python on the network: allow it, or t
 | `web_urls` / `prefer_native_with_helper` | A web version to use without the helper (YouTube → `youtube.com/tv`), and to skip when the helper is there |
 | `hidden` | Apps never shown (e.g. `166`, the E-Manual) |
 | `stremio` | The Stremio tile's app id, where its web app comes from, and whether the helper runs the streaming server ([below](#stremio)) |
+| `browser` | Optional: the search address (`%s` is the search), the Quick links, and `region`, the [DuckDuckGo region code](https://duckduckgo.com/duckduckgo-help-pages/settings/params/) for suggestions (`za-en` South Africa, `uk-en`, `us-en`). Brave Search, five links and no region when left out |
 | `launcher_url`, `launcher_origins`, `tile_icon` | Where you host the page (step 3) |
 
 ### 3. Host the page
@@ -119,6 +121,14 @@ A tile can't be changed once added (adding the same id again is ignored), so get
 
 - **Windows:** `powershell -ExecutionPolicy Bypass -File setup\windows\install.ps1` adds a logon task that runs it hidden and restarts it if it stops. Make sure the PC doesn't sleep.
 - **Linux (systemd):** `bash setup/linux/install.sh` installs a user service that starts at boot, opens port 8765 in ufw and disables sleep, including on lid close. To move a working setup to another computer, `python setup/pack.py` makes a zip with the code, Sidee's core and the pairing. Keep that zip private.
+
+### Browser
+
+Brave and other browsers can't be installed on VIDAA, so the launcher has a search screen of its own: the **Search** pill or the **Browser** tile (the TV Browser's tile). Type with the remote on the on-screen keyboard (or a keyboard, or a phone remote's typing); suggestions and your recent searches show on the right, Quick links underneath. **Search** opens the Brave results, or the address if you typed one, in the **TV Browser**. A page opened as an app (as the launcher is) only gets arrow-key focus, which can't click around a website; the TV Browser has a pointer.
+
+Brave Search shows few ads and doesn't track you, which is the difference from the TV Browser's own search. The websites you then open still show their own ads: the TV Browser can't take an ad blocker, and blocking ads for the whole TV (DNS) was left out on purpose ([docs/OPEN-PROBLEMS.md](docs/OPEN-PROBLEMS.md)). To come back from the TV Browser, press Home and open the Home tile.
+
+Suggestions come from DuckDuckGo's suggestion feed (Brave's turns scripts away), through the helper (`/api/suggest`) or, on the hosted page, `hosting/api/suggest.js`, a small Vercel function: the page may not ask the feed itself.
 
 ### Stremio
 
