@@ -352,6 +352,21 @@ class StremioServer(threading.Thread):
                                      creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         log(f"started Stremio's streaming server on port {STREMIO_PORT}")
 
+    @staticmethod
+    def apply_settings():
+        """The TV's player asks for every audio track of a video at once, and the server transcodes one track of a
+        kind at a time by default: each request cancels the one before and playback fails. Allow more."""
+        wanted = {"transcodeTrackConcurrency": 8, **STREMIO.get("server_settings", {})}
+        base = f"http://127.0.0.1:{STREMIO_PORT}/settings"
+        with urllib.request.urlopen(base, timeout=3) as r:
+            values = json.load(r).get("values", {})
+        changed = {k: v for k, v in wanted.items() if values.get(k) != v}
+        if changed:
+            req = urllib.request.Request(base, data=json.dumps(changed).encode(), method="POST",
+                                         headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=3).close()
+            log(f"Stremio server settings: {changed}")
+
     def warn(self, msg: str):
         if self.warned != msg:
             log(msg)
@@ -368,6 +383,7 @@ class StremioServer(threading.Thread):
                               "and the helper starts one the TV may use")
                 elif state == "open":
                     self.warned = ""
+                    self.apply_settings()
             except Exception as e:
                 log(f"Stremio server: {e}")
             time.sleep(30)
