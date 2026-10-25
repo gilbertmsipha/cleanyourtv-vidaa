@@ -32,7 +32,7 @@ In the TV: switch off the privacy options (Viewing Information Services, interes
 
 ## 2. Know when a web app closes
 
-The helper reopens the launcher when Netflix, YouTube or Prime Video close (DIAL tells it), but a web app (Disney+, Stremio, Spotify…) closing returns to VIDAA's home with no signal anywhere. Ideas not yet tried: MQTT topics this firmware publishes on its own (subscribe to exact names; wildcards deliver nothing); whether `gettvstate` answers the "static" identity on firmware that still accepts it; DLNA/UPnP events on port 38400.
+The helper reopens the launcher when Netflix, YouTube or Prime Video close (DIAL tells it), but a web app (Disney+, Stremio, Spotify…) or the TV Browser closing returns to VIDAA's home with no signal anywhere. That is why the Browser screen asks you to press Home and open the Home tile. Ideas not yet tried: MQTT topics this firmware publishes on its own (subscribe to exact names; wildcards deliver nothing); whether `gettvstate` answers the "static" identity on firmware that still accepts it; DLNA/UPnP events on port 38400.
 
 ## 3. Replace VIDAA's home outright
 
@@ -47,6 +47,8 @@ The page can't: `sendPlatformMessage` is ignored for non-VIDAA pages, DIAL refus
 ## 5. Smaller ones
 
 - **Detect that the TV was switched on** more reliably: if the TV keeps its network up in standby, port 36669 never closes and the power-on takeover doesn't fire.
+- **Ad-free websites:** Brave Search's results have few ads, but the sites you open from them keep theirs; the TV Browser takes no extensions. A filtering proxy on the helper is possible in principle, but it would break logins and many sites, and setting a proxy on the TV affects every app.
+- **Stremio's "error occurred while downloading"**, now and then during playback: most likely a torrent short of peers. Not yet traced in the server log.
 - **Uninstall apps** from the launcher: no network API is known; removal only hides.
 - **Stale hosted list:** `web/apps.json` on the static host is a snapshot; re-export after changing apps on the TV (the helper-served page is always live).
 - **YouTube's web version** (`youtube.com/tv`) looks soft in VIDAA's browser; the helper opens the native app instead when it can.

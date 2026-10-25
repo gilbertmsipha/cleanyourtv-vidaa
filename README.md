@@ -124,11 +124,35 @@ A tile can't be changed once added (adding the same id again is ignored), so get
 
 ### Browser
 
-Brave and other browsers can't be installed on VIDAA, so the launcher has a search screen of its own: the **Search** pill or the **Browser** tile (the TV Browser's tile). Type with the remote on the on-screen keyboard (or a keyboard, or a phone remote's typing); suggestions and your recent searches show on the right, Quick links underneath. **Search** opens the Brave results, or the address if you typed one, in the **TV Browser**. A page opened as an app (as the launcher is) only gets arrow-key focus, which can't click around a website; the TV Browser has a pointer.
+Brave and other browsers can't be installed on VIDAA, so the launcher has a search screen of its own that hands its results to the **TV Browser**, the browser VIDAA ships with.
 
-Brave Search shows few ads and doesn't track you, which is the difference from the TV Browser's own search. The websites you then open still show their own ads: the TV Browser can't take an ad blocker, and blocking ads for the whole TV (DNS) was left out on purpose ([docs/OPEN-PROBLEMS.md](docs/OPEN-PROBLEMS.md)). To come back from the TV Browser, press Home and open the Home tile.
+**How to use it**
 
-Suggestions come from DuckDuckGo's suggestion feed (Brave's turns scripts away), through the helper (`/api/suggest`) or, on the hosted page, `hosting/api/suggest.js`, a small Vercel function: the page may not ask the feed itself.
+1. On Home, press **Up** to reach the header and pick the round **🔍** button, or open the **Browser** tile in the grid (it replaces the TV Browser's tile).
+2. Type with the on-screen keyboard: arrows move, **OK** types. **Space**, **Delete**, **Clear** and **.com** are on the bottom rows. A USB keyboard, or a phone remote app's typing, types too.
+3. Suggestions appear on the right as you type; with the field empty, your **Recent** searches are there instead. Press **Right** past the end of a keyboard row to reach them, **OK** to search one.
+4. Press **Search**. Words open Brave Search's results; an address (`bbc.com`, `https://…`, a router's `192.168.1.1`) opens as it is.
+5. **Quick links** sit below the keyboard (press **Down** past the last row).
+6. The page opens in the TV Browser, where the remote moves a **pointer**: arrows move it, OK clicks, Back goes back a page.
+7. To come back, press **Home** and open the **Home** tile. **Back** on the search screen closes it.
+
+**Why it works this way**
+
+- A page opened as an app (as the launcher is) gets only arrow-key focus, which can't click around an ordinary website. The TV Browser has a pointer, and the TV opens it at any address the helper sends (`/api/browse`, `/go?browse=`), so the launcher does the typing and the TV Browser does the browsing. That needs the helper; without one the search screen isn't shown.
+- Brave Search shows few ads and doesn't profile you, which is the difference from the TV Browser's own search. The websites you then open still show their own ads: the TV Browser can't take an ad blocker, and blocking ads for the whole TV (DNS) was left out on purpose ([docs/OPEN-PROBLEMS.md](docs/OPEN-PROBLEMS.md)).
+- Suggestions come from DuckDuckGo's suggestion feed (Brave's turns scripts away), through the helper (`/api/suggest`) or, on the hosted page, `hosting/api/suggest.js`, a small Vercel function: the page may not ask the feed itself (no CORS).
+
+**Settings** (`browser` in `config.json`, all optional):
+
+```json
+"browser": {
+  "search": "https://search.brave.com/search?q=%s",
+  "region": "za-en",
+  "links": [{"name": "Brave Search", "url": "https://search.brave.com/"}, {"name": "News24", "url": "https://www.news24.com/"}]
+}
+```
+
+`search` is any search address with `%s` for the words (DuckDuckGo: `https://duckduckgo.com/?q=%s`). `region` is a [DuckDuckGo region code](https://duckduckgo.com/duckduckgo-help-pages/settings/params/) for suggestions (`za-en`, `uk-en`, `us-en`). `links` replaces the Quick links; five fit on screen. Restart the helper, and re-run `tools/export_static.py` and republish for the hosted page. Recent searches are kept in the TV browser's storage, separately for the hosted and the helper-served page.
 
 ### Stremio
 
@@ -149,9 +173,10 @@ Stremio desktop on the same computer keeps working: opened after the helper, it 
 
 | Remote | On a tile | In the dock |
 |---|---|---|
-| Arrows | Move the glass highlight; Down slides the grid up | Up reaches Inputs / Wi-Fi / Settings (with the helper) |
+| Arrows | Move the glass highlight; Down slides the grid up | Up reaches Search / Inputs / Wi-Fi / Settings / VIDAA (with the helper) |
 | OK | Open the app | |
 | Hold OK | Menu: **Remove from Home**, **Restore removed apps** | |
+| 🔍 Search | | The search screen ([Browser](#browser)) |
 | VIDAA pill | | Switch back to VIDAA's own home (automatic Home off), or turn automatic Home back on. The choice is kept by the helper (`data/takeover.json`) |
 | Back | Back to the dock | Stays on Home |
 
@@ -166,6 +191,9 @@ Removed apps are stored by the helper (`data/hidden.json`), or in the TV browser
 | The TV got a new address | The helper rediscovers it by `tv_name` over SSDP and updates the pairing. |
 | Stremio says the streaming server is unavailable, or can't transcode | Check `data/helper.log`: Stremio desktop may have started its own server first (close it), or Node.js/ffmpeg are missing. The server's own output is in `data/stremio-server.log`. |
 | Stremio has none of your addons | Sign in with the QR code: addons come with your Stremio account. The helper's copy keeps its own sign-in, separate from the app's own site. |
+| Search opens a black screen that returns to Home | The TV Browser didn't open: check `data/helper.log` for `/go failed`. The helper must be running; searching needs it. |
+| No suggestions while typing | The helper (or, on the hosted page, the Vercel function) can't reach DuckDuckGo. Searching still works. |
+| A website can't be clicked | It opened in the launcher instead of the TV Browser, which happens only without a helper. Open it from the search screen with the helper running. |
 | `the TV refused the connection` | The pairing was revoked (e.g. after a factory reset): pair again with Sidee. |
 | Holding OK opens the app instead of the menu | Your remote may not repeat or release keys like ours; open an issue with what `web/probes/probe.html` records. |
 
@@ -173,7 +201,7 @@ The probe pages in `web/probes/` are how everything here was found. Open one on 
 
 ## Contributing
 
-The most useful contributions are tests on other VIDAA models and firmware, and progress on the [open problems](docs/OPEN-PROBLEMS.md): blocking ads and tracking safely, detecting when web apps close, and replacing VIDAA's home outright. Please never post your TV's serial number, MAC address, IP, pairing file or Wi-Fi name in issues or screenshots.
+Read [docs/GUIDELINES.md](docs/GUIDELINES.md) first, and [docs/CHALLENGES.md](docs/CHALLENGES.md) for what was tried and why things are the way they are. The most useful contributions are tests on other VIDAA models and firmware, and progress on the [open problems](docs/OPEN-PROBLEMS.md): blocking ads and tracking safely, detecting when web apps close, and replacing VIDAA's home outright. Please never post your TV's serial number, MAC address, IP, pairing file or Wi-Fi name in issues or screenshots.
 
 ## Credits
 

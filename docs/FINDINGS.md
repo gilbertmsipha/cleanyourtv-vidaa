@@ -80,3 +80,17 @@ Implemented by Sidee (`core/client.py`); this is what the helper relies on:
 ## 8. VIDAA's own web home ("V Home")
 
 App `2562` in the app list is a web app at `tvmodules-vidaa.vidaahub.com/home-os/V1.0/index-home-os.html`. Its bundle is a good reference for VIDAA's internal APIs (the `appControl` message format, service hosts). Its server list is in [OPEN-PROBLEMS.md](OPEN-PROBLEMS.md#1-block-ads-and-tracking-without-breaking-the-tv).
+
+## 9. The TV Browser
+
+- The built-in browser is app `16` in the app list (`url: "browser"`, preset). MQTT `launchapp` with `{"appId": "16", "name": "TV Browser", "url": "<any http(s) address>"}` opens it **at that address**: verified with a logging server on the computer, which the TV requested within seconds.
+- It identifies as plain desktop Chrome (`Mozilla/5.0 (X11; Linux armv7l) … Chrome/111.0.0.0 Safari/537.36`), without the `VIDAA/9.0` token the app runtime sends, so sites serve their normal pages.
+- It has a **pointer** moved by the remote's arrows. Pages opened as apps (tiles, and anything the launcher navigates to) get only arrow-key focus, which is why the launcher hands websites to the TV Browser.
+- Its closing gives no DIAL or MQTT signal (see [OPEN-PROBLEMS.md](OPEN-PROBLEMS.md#2-know-when-a-web-app-closes)).
+- Search suggestions: Brave's feed (`search.brave.com/api/suggest`) sends `Access-Control-Allow-Origin: https://brave.com` only, and answered *429* to Python's `urllib` while answering curl from the same computer. DuckDuckGo's feed (`duckduckgo.com/ac/?type=list&q=…&kl=<region>`) answers both, in the same OpenSearch format.
+
+## 10. Stremio's streaming server
+
+- `server.js` 4.22.3 (from Stremio desktop, run by its `stremio-runtime.exe`, or downloadable from `dl.strem.io`) listens on port 11470 (http) and 12470 (https, which needs the account's key for its certificate). Settings live in `%APPDATA%\stremio\stremio-server\server-settings.json` and can be changed with `POST /settings` (JSON).
+- Without `NO_CORS=1` it answers only Stremio's own origins (`strem.io`, `stremio.com`, `stremio.github.io`, …): a request from the TV's copy gets no `Access-Control-Allow-Origin`.
+- `transcodeTrackConcurrency` (default 1) is per track type. The TV's player requests every audio track's HLS stream at once; with 1, each request destroyed the previous one (`passing track concurrency of 1`, then `Cannot read properties of null (reading 'audio')`). At 8, five audio tracks and the video start together. HEVC video is remuxed, not re-encoded: a 30 MB segment came back in under a second.
