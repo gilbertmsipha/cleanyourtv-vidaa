@@ -2,13 +2,21 @@
 
 A clean, Apple TV–style home screen for **Hisense VIDAA** TVs, with a black home, a four-app dock, an ambient glow in the focused app's colour and one glass highlight that springs between tiles. It is a port of the idea behind [CleanYourTV](https://github.com/Gathin23/cleanyourtv) to a TV that does not run Android.
 
+<!-- before/after: add docs/screens/before.jpg (a photo of VIDAA's own home) and it appears on the website too -->
+**Website:** [gilbertmsipha.github.io/cleanyourtv-vidaa](https://gilbertmsipha.github.io/cleanyourtv-vidaa/) · **Challenges:** [docs/CHALLENGES.md](docs/CHALLENGES.md)
+
 <p align="center">
-  <img src="docs/home.jpg" width="49%" alt="Home: the dock with the focused app's name above it and its colour glowing behind">
-  <img src="docs/grid.jpg" width="49%" alt="Pressing Down slides the grid of all apps up under the clock">
+  <img src="docs/screens/home.jpg" width="49%" alt="Home: the dock with the focused app's name above it and its colour glowing behind">
+  <img src="docs/screens/grid.jpg" width="49%" alt="Pressing Down slides the grid of all apps up under the clock">
 </p>
 <p align="center">
-  <img src="docs/inputs.jpg" width="49%" alt="The Inputs menu lists the TV's own inputs">
-  <img src="docs/menu.jpg" width="49%" alt="Holding OK on a tile opens a menu to remove it from Home">
+  <img src="docs/screens/search.jpg" width="49%" alt="The search screen: an on-screen keyboard for the remote, with suggestions on the right">
+  <img src="docs/screens/search-recent.jpg" width="49%" alt="Recent searches and quick links on the search screen">
+</p>
+<p align="center">
+  <img src="docs/screens/inputs.jpg" width="32%" alt="The Inputs menu lists the TV's own inputs">
+  <img src="docs/screens/menu.jpg" width="32%" alt="Holding OK on a tile opens a menu to remove it from Home">
+  <img src="docs/screens/vidaa-menu.jpg" width="32%" alt="The VIDAA button switches back to VIDAA's own home">
 </p>
 
 CleanYourTV works by talking to Android TVs over ADB: it disables junk apps and installs a new launcher. A VIDAA TV is Linux, with no ADB, no APKs and no way to replace its home screen. This project gets as close as the platform allows, using only what the TV itself offers: its web runtime, its remote-control channel and its casting service. Nothing is installed on the TV except one launcher tile, nothing is rooted or flashed, and you undo it by deleting the tile.
@@ -198,6 +206,15 @@ Removed apps are stored by the helper (`data/hidden.json`), or in the TV browser
 | Holding OK opens the app instead of the menu | Your remote may not repeat or release keys like ours; open an issue with what `web/probes/probe.html` records. |
 
 The probe pages in `web/probes/` are how everything here was found. Open one on the TV with `python tools/tile.py launch cytprobe "Probe" "http://<pc ip>:8765/probes/probe.html"`; their reports land in `reports/`.
+
+## The website
+
+`docs/index.html` is the project's page: a before/after slider, the screens, how it works and the challenges, in the launcher's style. GitHub Pages serves it once the repository is public: **Settings → Pages → Deploy from a branch → `main`, `/docs`**. It then lives at `https://<user>.github.io/cleanyourtv-vidaa/`.
+
+- **Before/after:** add a photo of VIDAA's own home as `docs/screens/before.jpg` (16:9, ideally 1920×1080) and the slider appears. Without it the page shows the new home alone.
+- **Buy Me a Coffee and X:** fill in `coffee` and `x` in the `LINKS` block at the bottom of `docs/index.html`. Left empty, their buttons stay hidden.
+- **Link previews** on X and elsewhere use `docs/screens/social.jpg` (1200×630).
+- New screenshots come from the helper-served launcher in headless Chromium at 1920×1080 with demo searches; they show no addresses or accounts.
 
 ## Contributing
 

@@ -2,6 +2,8 @@
 
 What stood in the way while building this, in the order we ran into it, with what we tried and what worked. Read it before changing how something works: most odd-looking choices in the code are the answer to one of these. The measurements behind them are in [FINDINGS.md](FINDINGS.md); what is still unsolved is in [OPEN-PROBLEMS.md](OPEN-PROBLEMS.md).
 
+![The finished home screen](screens/home.jpg)
+
 ## 1. The TV isn't Android
 
 **Problem:** [CleanYourTV](https://github.com/Gathin23/cleanyourtv) cleans Android TVs over ADB. The first step was checking whether this Hisense was one of the China-market sets that say "VIDAA" but run Android underneath.
@@ -35,7 +37,19 @@ What stood in the way while building this, in the order we ran into it, with wha
 
 **Problem:** the launcher is hosted on Vercel over https so that it works when the computer is off. An https page may not `fetch` a plain-http address on the home network (mixed content).
 
-**Solution:** the page *navigates* to the helper instead: `http://<pc>:8765/go?app=…&back=<launcher>`. The helper acts, shows a black "Opening…" page, and sends the browser back if nothing took over the screen. The same round trip later carried inputs, keys, the VIDAA switch and the Browser (`/go?browse=`). The helper also serves the same launcher live over http, where it can be called directly.
+**Solution:** the page *navigates* to the helper instead: `http://<pc>:8765/go?app=…&back=<launcher>`. The helper acts, shows a black "Opening…" page, and sends the browser back if nothing took over the screen. The same round trip later carried inputs, keys, the VIDAA switch and the Browser (`/go?browse=`).
+
+```mermaid
+sequenceDiagram
+    participant P as Launcher (https, on the TV)
+    participant H as Helper (http, on the computer)
+    participant T as TV (remote channel)
+    P->>H: navigate to /go?app=1 and back=launcher
+    H->>T: MQTT launchapp Netflix
+    H-->>P: black "Opening Netflix…" page
+    Note over P: Netflix takes the screen. If nothing does,<br/>the page goes back to the launcher by itself
+```
+ The helper also serves the same launcher live over http, where it can be called directly.
 
 **Related:** VIDAA's icon server sends no CORS headers, so the page can't sample icon colours for the glow. The helper serves icons from its own address, and `tools/export_static.py` works the colours out once for the hosted list.
 
@@ -77,6 +91,14 @@ The TV's Stremio is the community build [Stremio for VIDAA](https://github.com/N
 | Addons missing | Addons come with the Stremio account, and the helper's copy keeps its own sign-in (browser storage belongs to each address) | Sign in once on the TV with the QR code |
 | "Transcoding" errors, video won't start | The TV's player asks for every audio track of a video at once (five on the test episode). The server transcodes one track of each kind at a time by default, so each request cancelled the one before | The helper sets the server's `transcodeTrackConcurrency` to 8 and checks it every 30 seconds. Video is repackaged, not re-encoded, so it is light on the computer |
 
+```mermaid
+flowchart LR
+    TV["Stremio on the TV<br/>http://pc:8765/stremio/"] -- "streams, subtitles, HLS" --> S["Stremio's streaming server<br/>port 11470, NO_CORS=1"]
+    H["Helper"] -- "serves a cached copy of the app" --> TV
+    H -- "starts it, keeps transcodeTrackConcurrency at 8" --> S
+    S -- "torrents" --> I((Internet))
+```
+
 **Still seen:** an occasional "error occurred while downloading", usually a torrent short of peers. Another source of the same title usually plays.
 
 ## 10. A browser on a TV that can't install one
@@ -87,10 +109,23 @@ The TV's Stremio is the community build [Stremio for VIDAA](https://github.com/N
 
 **Solution:** the launcher does the typing (an on-screen keyboard built for the remote, suggestions, recent searches, quick links), and the helper opens the result in the TV Browser.
 
+![The search screen with suggestions](screens/search-suggestions.jpg)
+
+```mermaid
+flowchart LR
+    L["Search screen<br/>in the launcher"] -- "/api/suggest" --> H["Helper"]
+    H -- "suggestions" --> D[(DuckDuckGo)]
+    L -- "Search: /api/browse" --> H
+    H -- "MQTT launchapp 16<br/>url = Brave results" --> B["TV Browser<br/>with a pointer"]
+```
+
 **Smaller problems along the way:**
 - **Brave's suggestion feed** answers only Brave's own pages (CORS), and it returned *429 Too Many Requests* to Python and to servers while still answering curl, which suggests it looks at the client fingerprint. Suggestions come from DuckDuckGo's feed instead (same format, dependable), through the helper or a small Vercel function. Searches still go to Brave.
 - **American suggestions:** "weather joh" suggested Johnstown, PA before Johannesburg. DuckDuckGo's region code (`kl=za-en`) fixed it, and `browser.region` sets it.
 - **A crowded header:** a fifth header button pushed long dates ("Wednesday 30 September") under the buttons. The Search button became a round icon, and the date shortens to "Wed 30 Sep" only when it would collide. The first measurement ran before the Outfit font loaded and shortened every date, so the fit is measured again once fonts are ready.
+
+  ![Before: the date runs under the Search button](challenges/header-overlap.jpg)
+  ![After: a round Search button, and the date shortened to fit](challenges/header-fixed.jpg)
 - **Getting back:** the TV gives no signal when its browser closes, so the launcher can't reappear by itself. You press Home, then open the Home tile.
 
 ## 11. Working without seeing the screen

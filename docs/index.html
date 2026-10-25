@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clean Your TV for VIDAA</title>
+<meta name="description" content="A calm home screen for Hisense VIDAA TVs: just your apps, a proper search with Brave, and Stremio that streams. No hacking, nothing uninstalled.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Clean Your TV for VIDAA">
+<meta property="og:description" content="A calm home screen for Hisense VIDAA TVs: just your apps, a proper search with Brave, and Stremio that streams. No hacking, nothing uninstalled.">
+<meta property="og:image" content="https://gilbertmsipha.github.io/cleanyourtv-vidaa/screens/social.jpg">
+<meta property="og:url" content="https://gilbertmsipha.github.io/cleanyourtv-vidaa/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://gilbertmsipha.github.io/cleanyourtv-vidaa/screens/social.jpg">
+<meta name="theme-color" content="#0b0b0d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='6' width='26' height='17' rx='4' fill='%23fb542b'/%3E%3Crect x='11' y='25' width='10' height='2' rx='1' fill='%23fb542b'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300..700&display=swap">
+<style>
+  /* The site wears the launcher's clothes: near-black, one warm glow, Outfit, glass pills. */
+  :root {
+    --bg: #0b0b0d; --panel: #141417; --line: rgba(255,255,255,.12); --text: #f4f4f5; --muted: rgba(244,244,245,.64);
+    --faint: rgba(244,244,245,.42); --accent: #fb542b; --accent-ink: #fff; --glow: rgba(251,84,43,.22); --radius: 22px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 400 17px/1.6 Outfit, system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; }
+  img { display: block; max-width: 100%; height: auto; }
+  .wrap { width: min(1120px, 100% - 32px); margin: 0 auto; }
+  section { padding: 88px 0; }
+  h1, h2, h3 { line-height: 1.1; margin: 0; font-weight: 500; letter-spacing: -.02em; }
+  h2 { font-size: clamp(30px, 4vw, 44px); }
+  h3 { font-size: 21px; }
+  p { margin: 0; }
+  .eyebrow { font-size: 14px; font-weight: 500; letter-spacing: .18em; text-transform: uppercase; color: var(--faint); margin-bottom: 14px; }
+  .lede { color: var(--muted); font-size: 19px; max-width: 640px; margin-top: 16px; }
+  :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+
+  /* Pills, as on the TV */
+  .btn { display: inline-flex; align-items: center; gap: 10px; height: 54px; padding: 0 26px; border-radius: 27px; font-weight: 500; font-size: 17px;
+         text-decoration: none; border: 1.5px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.05));
+         transition: transform .2s ease, background-color .2s ease, color .2s ease; white-space: nowrap; }
+  .btn:hover { background: rgba(255,255,255,.95); color: #111; border-color: transparent; transform: translateY(-1px); }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .btn.primary:hover { background: #ff6a44; color: #fff; }
+  .btn svg { width: 20px; height: 20px; fill: currentColor; flex: none; }
+  .btn[hidden] { display: none; }
+
+  /* Header */
+  header { position: sticky; top: 0; z-index: 10; background: rgba(11,11,13,.78); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid rgba(255,255,255,.06); }
+  .bar { display: flex; align-items: center; gap: 24px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .brand i { width: 26px; height: 17px; border-radius: 5px; background: var(--accent); position: relative; display: block; }
+  .brand i::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -5px; height: 2px; border-radius: 1px; background: var(--accent); }
+  nav { display: flex; gap: 22px; margin-left: auto; font-size: 15px; color: var(--muted); }
+  nav a { text-decoration: none; }
+  nav a:hover { color: var(--text); }
+  .bar .btn { height: 40px; padding: 0 16px; font-size: 15px; }
+  @media (max-width: 760px) { nav { display: none; } .bar .btn { margin-left: auto; } }
+
+  /* Hero */
+  .hero { position: relative; padding: 72px 0 40px; }
+  .hero::before { content: ""; position: absolute; inset: -120px 0 auto; height: 760px; pointer-events: none;
+                  background: radial-gradient(900px 520px at 30% 30%, var(--glow), transparent 70%); }
+  .hero .wrap { position: relative; }
+  .hero h1 { font-size: clamp(42px, 7vw, 84px); font-weight: 400; letter-spacing: -.035em; max-width: 900px; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .ctas { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 32px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 26px; color: var(--faint); font-size: 15px; }
+  .facts span::before { content: "✓"; color: var(--accent); margin-right: 8px; }
+
+  /* The TV frame */
+  .tv { margin-top: 56px; border-radius: 20px; padding: 10px; background: linear-gradient(180deg, #2a2a2e, #111113);
+        box-shadow: 0 40px 120px -30px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.08); }
+  .tv .screen { position: relative; border-radius: 12px; overflow: hidden; aspect-ratio: 16 / 9; background: #000; }
+  .tv .screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .stand { width: 26%; height: 12px; margin: 0 auto; border-radius: 0 0 10px 10px; background: #1b1b1e; }
+
+  /* Before / after: the before image is clipped from the right as the handle moves */
+  .compare .before { clip-path: inset(0 calc(100% - var(--pos, 50%)) 0 0); }
+  .compare .handle { position: absolute; top: 0; bottom: 0; left: var(--pos, 50%); width: 3px; margin-left: -1.5px; background: #fff; pointer-events: none;
+                     box-shadow: 0 0 18px rgba(0,0,0,.5); }
+  .compare .handle::after { content: "‹ ›"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 50%;
+                            background: #fff; color: #111; display: grid; place-items: center; font: 600 18px/1 Outfit, sans-serif; letter-spacing: 2px; }
+  .compare input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: ew-resize; }
+  .compare .tag { position: absolute; top: 14px; padding: 6px 14px; border-radius: 16px; font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+                  background: rgba(0,0,0,.6); backdrop-filter: blur(6px); pointer-events: none; }
+  .compare .tag.b { left: 14px; } .compare .tag.a { right: 14px; }
+  .compare:not(.ready) .before, .compare:not(.ready) .handle, .compare:not(.ready) input, .compare:not(.ready) .tag { display: none; }
+  .caption { margin-top: 18px; text-align: center; color: var(--faint); font-size: 15px; }
+
+  /* Features */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 44px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; }
+  .card .ico { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: rgba(251,84,43,.14); margin-bottom: 18px; }
+  .card .ico svg { width: 22px; height: 22px; fill: var(--accent); }
+  .card p { color: var(--muted); margin-top: 8px; font-size: 16px; }
+  .note { margin-top: 18px; color: var(--faint); font-size: 15px; }
+
+  /* Screens */
+  .tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 36px; }
+  .tab { height: 42px; padding: 0 18px; border-radius: 21px; border: 1.5px solid var(--line); background: transparent; color: var(--muted); font: 500 15px Outfit, sans-serif; cursor: pointer; }
+  .tab[aria-selected="true"] { background: rgba(255,255,255,.95); color: #111; border-color: transparent; }
+  .shot-caption { margin-top: 18px; color: var(--muted); max-width: 760px; }
+  .shot-caption b { color: var(--text); font-weight: 500; }
+
+  /* How it works */
+  .flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; gap: 14px; margin-top: 44px; }
+  .node { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; min-height: 150px; }
+  .node .k { font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+  .node h3 { margin-top: 8px; }
+  .node p { color: var(--muted); font-size: 15px; margin-top: 8px; }
+  .arrow { color: var(--accent); font-size: 26px; text-align: center; }
+  @media (max-width: 860px) { .flow { grid-template-columns: 1fr; } .arrow { transform: rotate(90deg); } }
+  .steps { counter-reset: s; display: grid; gap: 12px; margin-top: 44px; padding: 0; list-style: none; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 44px 1fr; gap: 16px; align-items: start; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 18px 20px; }
+  .steps li::before { content: counter(s); width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.08); font-weight: 600; }
+  .steps b { font-weight: 500; }
+  .steps p { color: var(--muted); font-size: 16px; margin-top: 2px; }
+  code { font: 14px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace; background: rgba(255,255,255,.08); padding: 2px 6px; border-radius: 6px; overflow-wrap: anywhere; }
+
+  /* Challenges */
+  .story { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 44px; }
+  @media (max-width: 760px) { .story { grid-template-columns: 1fr; } }
+  .story .card h3 { font-size: 19px; }
+  .story .card .fix { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--text); font-size: 15px; }
+  .story .card .fix::before { content: "What worked  "; color: var(--accent); font-weight: 600; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+  .figure { margin-top: 28px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  .figure img { border-radius: 10px; }
+  .figure img + .lbl { margin-top: 10px; }
+  .figure .lbl { color: var(--faint); font-size: 14px; margin: 14px 2px 8px; }
+
+  /* Support */
+  .support { text-align: center; }
+  .support .lede { margin: 16px auto 0; }
+  .support .ctas { justify-content: center; }
+
+  footer { border-top: 1px solid rgba(255,255,255,.06); padding: 40px 0 56px; color: var(--faint); font-size: 15px; }
+  footer .wrap { display: grid; gap: 10px; }
+  footer a { color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="#top"><i></i>Clean Your TV for VIDAA</a>
+    <nav aria-label="Sections">
+      <a href="#features">What you get</a>
+      <a href="#screens">Screens</a>
+      <a href="#how">How it works</a>
+      <a href="#story">Challenges</a>
+    </nav>
+    <a class="btn" data-link="github" href="#">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.6 22.4c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0C17.3 4.1 18.3 4.4 18.3 4.4c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0 0 12 .5z"/></svg>GitHub</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap">
+      <div class="eyebrow">For Hisense and other VIDAA TVs</div>
+      <h1>Your VIDAA TV, <em>calm</em> again.</h1>
+      <p class="lede">A clean home screen with only the apps you use, a proper search with Brave, and Stremio that actually streams. No hacking, nothing uninstalled, and one press takes you back to VIDAA's own home.</p>
+      <div class="ctas">
+        <a class="btn primary" data-link="github" href="#">Set it up on GitHub →</a>
+        <a class="btn" data-link="coffee" href="#" hidden>☕ Buy me a coffee</a>
+      </div>
+      <div class="facts"><span>Free and open source</span><span>No firmware changes</span><span>Built and tested on a real Hisense TV</span></div>
+
+      <div class="tv">
+        <div class="screen compare" id="compare" style="--pos:50%">
+          <img class="after" src="screens/home.jpg" width="1920" height="1080" alt="After: the new home screen, with Netflix, YouTube, Prime Video and Disney+ in a dock under the clock">
+          <img class="before" src="screens/before.jpg" width="1920" height="1080" alt="Before: VIDAA's own home screen">
+          <div class="handle"></div>
+          <span class="tag b">Before</span><span class="tag a">After</span>
+          <input type="range" min="0" max="100" value="50" aria-label="Slide between before and after">
+        </div>
+      </div>
+      <div class="stand"></div>
+      <p class="caption" id="compareCaption">The new home screen, as the TV shows it.</p>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="eyebrow">What you get</div>
+      <h2>Everything you open, nothing you don't.</h2>
+      <p class="lede">The look of <a href="https://cleanyour.tv/">CleanYourTV</a>'s launcher, rebuilt for VIDAA, which isn't Android and has no way to install launchers.</p>
+      <div class="grid">
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M3 5h18v11H3zM8 19h8v2H8z"/></svg></div><h3>A calm home</h3><p>Your four favourites in a dock, every other app in a grid below, a glass highlight and the focused app's colour glowing behind. No banners, no rows of things to buy.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg></div><h3>Netflix and the rest, from Home</h3><p>Native apps, the TV's inputs and settings open from the launcher. When Netflix, YouTube or Prime Video close, it comes back by itself.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M10 3a7 7 0 0 1 5.6 11.2l5.6 5.6-1.4 1.4-5.6-5.6A7 7 0 1 1 10 3zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10z"/></svg></div><h3>Search with Brave</h3><p>A keyboard made for the remote, suggestions as you type, and your recent searches. Results open in the TV's browser, where the remote moves a pointer.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2 3 7v10l9 5 9-5V7zm0 2.3 6.5 3.6L12 11.6 5.5 7.9zM5 9.6l6 3.4v6.6l-6-3.4zm8 10V13l6-3.4v6.6z"/></svg></div><h3>Stremio that streams</h3><p>Torrents, transcoding and your addons on the TV's Stremio, with the streaming server running on your computer and kept healthy for you.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14z"/></svg></div><h3>Remove from Home</h3><p>Hold OK on any tile to hide it. Nothing is uninstalled, and one menu brings everything back.</p></div>
+        <div class="card"><div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3 2 11.5h3V21h5.5v-6h3v6H19v-9.5h3z"/></svg></div><h3>Back to VIDAA in one press</h3><p>The VIDAA button returns to the TV's own home and stops the launcher taking over, until you turn it back on.</p></div>
+      </div>
+      <p class="note">What it doesn't do: block ads for the whole TV. On VIDAA that means blocking its servers, which can break the store, updates or the home screen, so it was left out on purpose.</p>
+    </div>
+  </section>
+
+  <section id="screens">
+    <div class="wrap">
+      <div class="eyebrow">On the TV</div>
+      <h2>Every screen, at the TV's own size.</h2>
+      <div class="tabs" role="tablist" aria-label="Screens" id="tabs"></div>
+      <div class="tv"><div class="screen"><img id="shot" src="screens/home.jpg" width="1920" height="1080" alt=""></div></div>
+      <div class="stand"></div>
+      <p class="shot-caption" id="shotCaption"></p>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="eyebrow">How it works</div>
+      <h2>A web page and a small helper.</h2>
+      <p class="lede">VIDAA can't install launchers, but it can add a web page as an app. That page is the launcher. A small program on a computer at home does what a page isn't allowed to: open native apps, switch inputs and press keys, over the same channel Hisense's phone remote uses.</p>
+      <div class="flow">
+        <div class="node"><div class="k">On the TV</div><h3>The launcher</h3><p>A web page added as a "Home" tile, hosted for free, so it works even when the computer is off.</p></div>
+        <div class="arrow" aria-hidden="true">⇄</div>
+        <div class="node"><div class="k">On your computer</div><h3>The helper</h3><p>Python, on Windows or Linux. Opens apps, runs Stremio's streaming server, brings the launcher back.</p></div>
+        <div class="arrow" aria-hidden="true">⇄</div>
+        <div class="node"><div class="k">On the TV again</div><h3>The remote channel</h3><p>Paired once with a 4-digit PIN through <a href="https://github.com/Empi9245/Sidee">Sidee</a>, exactly like the phone remote app.</p></div>
+      </div>
+      <ol class="steps">
+        <li><div><b>Pair with the TV</b><p>Run Sidee on your computer and type the PIN the TV shows.</p></div></li>
+        <li><div><b>Start the helper</b><p>Copy <code>config.example.json</code> to <code>config.json</code> and run <code>python helper/cyt_helper.py</code>. Open <code>http://localhost:8765</code> to see your launcher.</p></div></li>
+        <li><div><b>Host the page</b><p>Publish the <code>web/</code> folder to Vercel or any static host.</p></div></li>
+        <li><div><b>Add the Home tile</b><p>One command adds it to the TV, pointing at your page and your helper.</p></div></li>
+        <li><div><b>Keep the helper running</b><p>An installer sets it to start with Windows, or as a service on Linux.</p></div></li>
+      </ol>
+      <div class="ctas"><a class="btn primary" data-link="guide" href="#">Read the full guide →</a></div>
+    </div>
+  </section>
+
+  <section id="story">
+    <div class="wrap">
+      <div class="eyebrow">The challenges</div>
+      <h2>Nothing here worked the first time.</h2>
+      <p class="lede">The TV wasn't Android, pages couldn't open apps, tiles couldn't be changed, and Stremio refused to stream. Here is what stood in the way, and what got around it.</p>
+      <div class="story">
+        <div class="card"><h3>It isn't Android</h3><p>CleanYourTV cleans Android TVs over ADB. This Hisense runs VIDAA, a Linux system with no ADB and no way to install a launcher.</p><p class="fix">Rebuild the launcher as a web page the TV adds as an app.</p></div>
+        <div class="card"><h3>A page can't open Netflix</h3><p>VIDAA ignores the launch message from any page but its own, and its casting service refuses web pages.</p><p class="fix">A helper on the home network sends the same command Hisense's phone remote does.</p></div>
+        <div class="card"><h3>Secure pages can't call home</h3><p>The hosted page is https, and https pages may not talk to a plain-http address on your network.</p><p class="fix">The page navigates to the helper instead, which acts and sends the TV straight back.</p></div>
+        <div class="card"><h3>No signal when you press Home</h3><p>The TV never tells anyone the Home button was pressed, and its status message goes unanswered on this firmware.</p><p class="fix">Watch Netflix, YouTube and Prime close, and the TV switch on, then bring the launcher back.</p></div>
+        <div class="card"><h3>Stremio wouldn't stream</h3><p>Its streaming server ignored the TV, addons were missing, and videos failed with "transcoding" errors because the player asked for all five audio tracks at once.</p><p class="fix">The helper serves the app, runs the server open to the TV, and lets it transcode eight tracks together.</p></div>
+        <div class="card"><h3>A browser that can't be installed</h3><p>Brave won't install on VIDAA, and pages opened as apps can't click links. A test server on the computer showed the TV's own browser opens any address we send.</p><p class="fix">Search in the launcher, browse in the TV Browser, which has a pointer.</p></div>
+      </div>
+      <div class="figure">
+        <div class="lbl">A small one: the new Search button pushed long dates under the header buttons…</div>
+        <img src="challenges/header-overlap.jpg" width="1920" height="230" alt="The date running under the Search button" loading="lazy">
+        <div class="lbl">…so the button became round, and the date shortens only when it would collide.</div>
+        <img src="challenges/header-fixed.jpg" width="1920" height="230" alt="The date shortened to Wed 30 Sep beside a round search button" loading="lazy">
+      </div>
+      <div class="ctas"><a class="btn" data-link="challenges" href="#">All twelve challenges →</a></div>
+    </div>
+  </section>
+
+  <section class="support" id="support">
+    <div class="wrap">
+      <div class="eyebrow">Help it grow</div>
+      <h2>Made your TV nicer?</h2>
+      <p class="lede">Star the repository, tell us how it runs on your VIDAA model, or take on one of the open problems. And if you'd like to, a coffee keeps it going.</p>
+      <div class="ctas">
+        <a class="btn primary" data-link="github" href="#">★ Star on GitHub</a>
+        <a class="btn" data-link="coffee" href="#" hidden>☕ Buy me a coffee</a>
+        <a class="btn" data-link="x" href="#" hidden>Follow on X</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Built on <a href="https://github.com/Gathin23/cleanyourtv">CleanYourTV</a> by Gathin (the idea and the launcher's look), <a href="https://github.com/Empi9245/Sidee">Sidee</a> by Empi9245 (pairing and the remote channel), <a href="https://github.com/Zfinix/vidaa-launcher">vidaa-launcher</a> by Zfinix and <a href="https://github.com/NoobyGains/stremio-vidaa-tv">Stremio for VIDAA</a> by NoobyGains.</p>
+    <p>Not affiliated with Hisense, VIDAA, CleanYourTV or Stremio. Their names and logos belong to their owners. MIT licensed; use it on TVs you own.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // Your links. Leave coffee or x empty and their buttons stay hidden.
+  var LINKS = {
+    github: 'https://github.com/gilbertmsipha/cleanyourtv-vidaa',
+    coffee: '',   // e.g. 'https://buymeacoffee.com/yourname'
+    x: ''         // e.g. 'https://x.com/yourname'
+  };
+  LINKS.guide = LINKS.github + '#set-up';
+  LINKS.challenges = LINKS.github + '/blob/main/docs/CHALLENGES.md';
+  [].forEach.call(document.querySelectorAll('[data-link]'), function (a) {
+    var url = LINKS[a.getAttribute('data-link')];
+    if (url) { a.href = url; a.hidden = false; if (!/^#/.test(url)) a.rel = 'noopener'; }
+    else a.hidden = true;
+  });
+
+  // Before / after: shown once there is a "before" photo (screens/before.jpg).
+  var cmp = document.getElementById('compare'), before = cmp.querySelector('.before'), range = cmp.querySelector('input');
+  function ready() { cmp.classList.add('ready'); document.getElementById('compareCaption').textContent = 'Drag to compare VIDAA\'s home with the new one.'; }
+  if (before.complete && before.naturalWidth) ready(); else before.addEventListener('load', ready);
+  range.addEventListener('input', function () { cmp.style.setProperty('--pos', range.value + '%'); });
+
+  // Screens
+  var SHOTS = [
+    ['Home', 'home.jpg', '<b>Home.</b> Your four favourites in the dock; the focused app\'s name above it and its colour glowing behind.'],
+    ['All apps', 'grid.jpg', '<b>All apps.</b> Press Down and the grid of everything else slides up under the clock.'],
+    ['Search', 'search.jpg', '<b>Search.</b> A keyboard laid out for the remote. Words go to Brave Search; an address opens as it is.'],
+    ['Suggestions', 'search-suggestions.jpg', '<b>Suggestions.</b> Results for your region as you type; press Right to pick one.'],
+    ['Recent', 'search-recent.jpg', '<b>Recent searches</b> and quick links, one press away.'],
+    ['Inputs', 'inputs.jpg', '<b>Inputs.</b> The TV\'s own inputs, from the header.'],
+    ['Remove', 'menu.jpg', '<b>Hold OK</b> on a tile to remove it from Home. Nothing is uninstalled.'],
+    ['Back to VIDAA', 'vidaa-menu.jpg', '<b>The VIDAA button</b> switches back to the TV\'s own home, and turns the launcher off until you want it again.']
+  ];
+  var tabs = document.getElementById('tabs'), shot = document.getElementById('shot'), cap = document.getElementById('shotCaption');
+  function show(i) {
+    shot.src = 'screens/' + SHOTS[i][1]; shot.alt = SHOTS[i][0]; cap.innerHTML = SHOTS[i][2];
+    [].forEach.call(tabs.children, function (t, j) { t.setAttribute('aria-selected', String(i === j)); t.tabIndex = i === j ? 0 : -1; });
+  }
+  SHOTS.forEach(function (s, i) {
+    var b = document.createElement('button'); b.className = 'tab'; b.type = 'button'; b.setAttribute('role', 'tab'); b.textContent = s[0];
+    b.addEventListener('click', function () { show(i); });
+    b.addEventListener('keydown', function (e) {
+      var d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (d) { var n = (i + d + SHOTS.length) % SHOTS.length; show(n); tabs.children[n].focus(); e.preventDefault(); }
+    });
+    tabs.appendChild(b);
+    new Image().src = 'screens/' + s[1];
+  });
+  show(2);   // the hero already shows Home
+})();
+</script>
+</body>
+</html>
