@@ -62,7 +62,10 @@ def main():
     # Native apps listed in config native_apps are kept too, flagged native: the page shows them only when it has a
     # helper to open them (?helper= in the tile's address).
     native = [str(x) for x in CONFIG.get("native_apps", [])]
-    prefer_native = [str(x) for x in CONFIG.get("prefer_native_with_helper", [])]
+    # Opened through the helper when there is one: YouTube's native app, Stremio served with the streaming server.
+    helper_first = [str(x) for x in CONFIG.get("prefer_native_with_helper", [])]
+    if (CONFIG.get("stremio") or {}).get("app_id"):
+        helper_first.append(str(CONFIG["stremio"]["app_id"]))
     with urllib.request.urlopen(HELPER + "/api/sources", timeout=20) as r:
         sources = [{"id": s["sourceid"], "name": s.get("displayname", s["sourceid"]).replace("▶", "").strip()}
                    for s in json.load(r)["sources"]]
@@ -82,9 +85,8 @@ def main():
                  "icon": icon_url(a)}
         if str(a["appId"]) in native:
             entry["native"] = True
-        elif str(a["appId"]) in prefer_native:
-            # Has a web version, but the TV's own app is better: opened through the helper when there is one.
-            entry["preferNative"] = True
+        elif str(a["appId"]) in helper_first:
+            entry["helperFirst"] = True
             entry["url"] = a["url"]
         else:
             entry["url"] = a["url"]

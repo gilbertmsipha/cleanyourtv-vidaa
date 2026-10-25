@@ -13,6 +13,7 @@
   "web_urls": {"3": "https://www.youtube.com/tv"},
   "prefer_native_with_helper": ["3"],
   "hidden": ["166"],
+  "stremio": {"app_id": "stremiodebug", "web_app": "https://noobygains.github.io/stremio-vidaa-tv/", "server": true},
   "greeting_name": "",
   "clock_24h": false,
   "home_takeover": true,

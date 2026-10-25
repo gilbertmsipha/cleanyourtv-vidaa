@@ -9,12 +9,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent          # cyt-vidaa
 TV = ROOT.parent
 OUT = TV / "cyt-vidaa-kit.zip"
-SKIP = {"reports", ".venv", "__pycache__", "icons"}
+# Rebuilt or re-downloaded on the other computer: caches, logs, and the Stremio app and server copies.
+SKIP = {"reports", ".venv", "__pycache__", "icons", ".git", "stremio-app", "stremio-server"}
 
 with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
     for base, prefix in ((ROOT, "cyt-vidaa"), (TV / "sidee" / "core", "sidee/core")):
         for f in base.rglob("*"):
-            if f.is_file() and not SKIP & set(f.relative_to(base).parts) and not f.name.startswith("probe"):
+            if (f.is_file() and not SKIP & set(f.relative_to(base).parts) and not f.name.startswith("probe")
+                    and f.suffix not in (".log", ".pid")):
                 z.write(f, f"{prefix}/{f.relative_to(base).as_posix()}")
     z.write(TV / "sidee" / "sidee.py", "sidee/sidee.py")
     z.write(TV / "sidee" / "LICENSE", "sidee/LICENSE")

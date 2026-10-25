@@ -461,9 +461,9 @@
     setTimeout(function () { t.classList.remove('press'); }, 160);
     if (state.static) {
       // A native app needs the helper. This https page may not call a LAN http address, but it may navigate to
-      // one: the helper opens the app and sends the browser back here. An app with a web version but a better
-      // native one (YouTube) goes native when there is a helper.
-      if (app.native || (app.preferNative && state.helper)) { viaHelper('app=' + encodeURIComponent(app.appId)); return; }
+      // one: the helper opens the app and sends the browser back here. An app that works better through the helper
+      // (YouTube's native app, Stremio with the streaming server) goes through it when there is one.
+      if (app.native || (app.helperFirst && state.helper)) { viaHelper('app=' + encodeURIComponent(app.appId)); return; }
       try { sessionStorage.setItem('cyt-focus', String(focus.index)); } catch (e) {}
       setTimeout(function () { location.href = app.url; }, 120);
       return;

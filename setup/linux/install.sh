@@ -9,6 +9,8 @@ KIT="$(dirname "$DIR")"                              # holds cyt-vidaa/ and side
 
 echo "1/5  Python environment"
 command -v python3 >/dev/null || sudo pacman -S --needed --noconfirm python
+# Stremio's streaming server (the helper downloads it) runs on Node and transcodes with ffmpeg.
+command -v node >/dev/null && command -v ffmpeg >/dev/null || sudo pacman -S --needed --noconfirm nodejs ffmpeg
 python3 -m venv "$DIR/.venv"
 "$DIR/.venv/bin/pip" install -q "paho-mqtt==2.1.0"
 
@@ -41,9 +43,10 @@ systemctl --user enable --now cyt-helper.service
 # Keep user services running without anyone logged in.
 loginctl enable-linger "$USER" || sudo loginctl enable-linger "$USER"
 
-echo "4/5  Firewall: let the TV reach port 8765"
+echo "4/5  Firewall: let the TV reach ports 8765 (helper) and 11470 (Stremio)"
 if command -v ufw >/dev/null && sudo ufw status | grep -q "Status: active"; then
   sudo ufw allow 8765/tcp comment "Clean Your TV helper"
+  sudo ufw allow 11470/tcp comment "Stremio streaming server"
 fi
 
 echo "5/5  Never sleep (it must be awake for the TV)"

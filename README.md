@@ -25,6 +25,7 @@ CleanYourTV works by talking to Android TVs over ADB: it disables junk apps and 
 | Inputs menu, Settings button | With the helper | The TV's own input list; Settings sends the remote's Menu key |
 | Remove apps from Home (hold OK) | Yes | Hidden from the launcher; the app stays installed |
 | Home appears when the TV is switched on, and when Netflix, YouTube or Prime Video closes | With the helper | The helper watches the TV and opens the launcher (VIDAA's home flashes for ~2 s first) |
+| Stremio with your addons, torrents and transcoding | With the helper | The helper serves [Stremio for VIDAA](https://github.com/NoobyGains/stremio-vidaa-tv) itself and keeps Stremio's streaming server running ([below](#stremio)) |
 | Go back to VIDAA's own home | With the helper | **VIDAA** pill: *Switch to VIDAA Home* turns the automatic Home off; the same pill turns it back on |
 | Replace VIDAA's home outright | **No** | VIDAA has no setting for it; the Home button still goes to VIDAA's home |
 | Disable or uninstall the TV's own apps, telemetry or ads | **No** | No ADB on VIDAA. Uninstall apps on the TV itself; see [open problems](docs/OPEN-PROBLEMS.md) for ads and tracking |
@@ -91,6 +92,7 @@ On first run Windows asks whether to allow Python on the network: allow it, or t
 | `native_apps` | Native apps to show when a helper can open them (Netflix `1`, Prime Video `2`, …) |
 | `web_urls` / `prefer_native_with_helper` | A web version to use without the helper (YouTube → `youtube.com/tv`), and to skip when the helper is there |
 | `hidden` | Apps never shown (e.g. `166`, the E-Manual) |
+| `stremio` | The Stremio tile's app id, where its web app comes from, and whether the helper runs the streaming server ([below](#stremio)) |
 | `launcher_url`, `launcher_origins`, `tile_icon` | Where you host the page (step 3) |
 
 ### 3. Host the page
@@ -118,6 +120,21 @@ A tile can't be changed once added (adding the same id again is ignored), so get
 - **Windows:** `powershell -ExecutionPolicy Bypass -File setup\windows\install.ps1` adds a logon task that runs it hidden and restarts it if it stops. Make sure the PC doesn't sleep.
 - **Linux (systemd):** `bash setup/linux/install.sh` installs a user service that starts at boot, opens port 8765 in ufw and disables sleep, including on lid close. To move a working setup to another computer, `python setup/pack.py` makes a zip with the code, Sidee's core and the pairing. Keep that zip private.
 
+### Stremio
+
+The TV's Stremio is the community build [Stremio for VIDAA](https://github.com/NoobyGains/stremio-vidaa-tv); add its tile with Sidee's Stremio preset (app id `stremiodebug`). On its own it can't stream torrents or transcode: that needs Stremio's streaming server on a computer, and two things keep the TV's Stremio from using one:
+
+- The app is served over https, and a page served over https may not call a plain-http address on the home network (mixed content).
+- Stremio's server answers only pages from Stremio's own sites unless it is started with `NO_CORS=1`.
+
+So when the `stremio` setting is present, the helper does both jobs:
+- **Serves the app itself** at `http://<pc ip>:8765/stremio/`. It fetches the app from its site and keeps a copy, so updates arrive and it still opens when the internet is down.
+- **Keeps the streaming server running** on port 11470 with `NO_CORS=1`. It uses Stremio desktop's own server if Stremio desktop is installed; otherwise Node.js runs a copy it downloads, which needs `node` and `ffmpeg`.
+
+The Stremio tile opens the helper's copy, already pointed at the server. Sign in once with the QR code on the TV; your account brings your addons. Without the helper, the tile opens the app's own site, where only debrid and direct streams play.
+
+Stremio desktop on the same computer keeps working: opened after the helper, it uses the helper's server. If Stremio desktop was opened first, its own server holds the port and keeps the TV out; close Stremio desktop, and the helper starts its server within 30 seconds.
+
 ## Using it
 
 | Remote | On a tile | In the dock |
@@ -137,6 +154,8 @@ Removed apps are stored by the helper (`data/hidden.json`), or in the TV browser
 | Native tiles show an error page | The helper isn't running or the PC is asleep. Press Back; web apps still work. |
 | The helper stops being reached after a router restart | Your PC got a new address. The helper notices on start and adds a new Home tile; delete the old one. Reserving the PC's address on the router (DHCP reservation) avoids it. |
 | The TV got a new address | The helper rediscovers it by `tv_name` over SSDP and updates the pairing. |
+| Stremio says the streaming server is unavailable, or can't transcode | Check `data/helper.log`: Stremio desktop may have started its own server first (close it), or Node.js/ffmpeg are missing. The server's own output is in `data/stremio-server.log`. |
+| Stremio has none of your addons | Sign in with the QR code: addons come with your Stremio account. The helper's copy keeps its own sign-in, separate from the app's own site. |
 | `the TV refused the connection` | The pairing was revoked (e.g. after a factory reset): pair again with Sidee. |
 | Holding OK opens the app instead of the menu | Your remote may not repeat or release keys like ours; open an issue with what `web/probes/probe.html` records. |
 

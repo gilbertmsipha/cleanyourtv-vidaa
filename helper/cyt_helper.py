@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import html
 import json
+import mimetypes
+import os
+import shutil
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -235,6 +239,148 @@ class Sources:
 SOURCES = Sources()
 
 
+STREMIO = CONFIG.get("stremio") or {}
+STREMIO_PORT = 11470
+STREMIO_SERVER_JS = "https://dl.strem.io/server/v4.22.3/desktop/server.js"
+
+
+class AppMirror:
+    """A web app kept on this computer and served from it over plain http.
+
+    Stremio's TV build lives on an https site, and an https page may not call the streaming server on this computer,
+    which is http (mixed content). Served from here, the page and the server are both plain http on the home network.
+    Files are fetched from the app's site when first asked for and kept; when its index.html changes, the copy is
+    dropped, since the other files may change under the same names."""
+
+    TYPES = {".wasm": "application/wasm", ".js": "text/javascript", ".mjs": "text/javascript",
+             ".json": "application/json", ".svg": "image/svg+xml", ".ttf": "font/ttf"}
+
+    def __init__(self, upstream: str, folder: Path):
+        self.upstream, self.folder = upstream.rstrip("/") + "/", folder
+        self.lock = threading.Lock()
+
+    def _fetch(self, rel: str, timeout: float) -> bytes:
+        req = urllib.request.Request(self.upstream + rel, headers={"User-Agent": "cyt-helper"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.read()
+
+    def _index(self) -> bytes:
+        cached = self.folder / "index.html"
+        try:
+            body = self._fetch("", 4)
+        except OSError:
+            if cached.exists():  # offline: the kept copy still works
+                return cached.read_bytes()
+            raise
+        with self.lock:
+            if not cached.exists() or cached.read_bytes() != body:
+                shutil.rmtree(self.folder, ignore_errors=True)
+                self.folder.mkdir(parents=True)
+                cached.write_bytes(body)
+                log(f"web app {self.upstream}: fetched a new version")
+        return body
+
+    def get(self, rel: str, query: str) -> tuple[bytes, str] | None:
+        if rel in ("", "index.html"):
+            return self._index(), "text/html; charset=utf-8"
+        if ".." in rel.split("/") or rel.startswith("/") or "\\" in rel:
+            return None
+        path = self.folder / (rel + ("@" + quote(query, safe="") if query else ""))
+        if not path.exists():
+            body = self._fetch(rel + ("?" + query if query else ""), 30)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            part = path.with_name(f"{path.name}.{threading.get_ident()}.part")
+            part.write_bytes(body)
+            part.replace(path)
+        ctype = self.TYPES.get(Path(rel).suffix.lower()) or mimetypes.guess_type(rel)[0] or "application/octet-stream"
+        return path.read_bytes(), ctype
+
+
+STREMIO_APP = AppMirror(STREMIO["web_app"], DATA / "stremio-app") if STREMIO.get("web_app") else None
+
+
+class StremioServer(threading.Thread):
+    """Stremio's streaming server (torrents and transcoding), kept running on this computer for the TV's Stremio.
+
+    It is Stremio's own server.js, started with NO_CORS: by default it answers only pages from Stremio's own sites,
+    and the TV's Stremio comes from this helper. Stremio desktop, if installed, brings server.js and a runtime for it;
+    otherwise Node runs a downloaded copy. Stremio desktop opened later finds this server running and uses it."""
+
+    def __init__(self):
+        super().__init__(daemon=True, name="stremio-server")
+        self.proc = None
+        self.warned = ""
+
+    @staticmethod
+    def state() -> str:
+        """'open' (the TV's Stremio may use it), 'closed' (running, but for Stremio's own sites only) or 'down'."""
+        req = urllib.request.Request(f"http://127.0.0.1:{STREMIO_PORT}/settings", headers={"Origin": "http://cyt.invalid"})
+        try:
+            with urllib.request.urlopen(req, timeout=3) as r:
+                return "open" if r.headers.get("Access-Control-Allow-Origin") else "closed"
+        except OSError:
+            return "down"
+
+    @staticmethod
+    def command() -> list | None:
+        if STREMIO.get("server_command"):
+            return STREMIO["server_command"]
+        desktop = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Stremio"
+        if (desktop / "stremio-runtime.exe").exists() and (desktop / "server.js").exists():
+            return [str(desktop / "stremio-runtime.exe"), str(desktop / "server.js")]
+        node = shutil.which("node")
+        if not node:
+            return None
+        script = DATA / "stremio-server" / "server.js"
+        if not script.exists():
+            log("downloading Stremio's streaming server")
+            script.parent.mkdir(parents=True, exist_ok=True)
+            with urllib.request.urlopen(STREMIO_SERVER_JS, timeout=120) as r:
+                body = r.read()
+            script.write_bytes(body)
+        return [node, str(script)]
+
+    def start_server(self):
+        cmd = self.command()
+        if not cmd:
+            self.warn("Stremio's streaming server cannot start: install Stremio desktop, or Node.js and ffmpeg")
+            return
+        DATA.mkdir(exist_ok=True)
+        out = open(DATA / "stremio-server.log", "ab")
+        self.proc = subprocess.Popen(cmd, cwd=str(Path(cmd[-1]).parent), env=dict(os.environ, NO_CORS="1"),
+                                     stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        log(f"started Stremio's streaming server on port {STREMIO_PORT}")
+
+    def warn(self, msg: str):
+        if self.warned != msg:
+            log(msg)
+            self.warned = msg
+
+    def run(self):
+        while True:
+            try:
+                state = self.state()
+                if state == "down" and (self.proc is None or self.proc.poll() is not None):
+                    self.start_server()
+                elif state == "closed":
+                    self.warn("Stremio desktop's own server is running and keeps the TV out: close Stremio desktop, "
+                              "and the helper starts one the TV may use")
+                elif state == "open":
+                    self.warned = ""
+            except Exception as e:
+                log(f"Stremio server: {e}")
+            time.sleep(30)
+
+
+def launch_target(app: dict) -> dict:
+    """The app as the TV should open it: Stremio from this helper, with this computer's streaming server."""
+    if STREMIO_APP and str(app.get("appId")) == str(STREMIO.get("app_id")):
+        ip = own_ip()
+        return dict(app, url=f"http://{ip}:{CONFIG.get('port', 8765)}/stremio/?server=http://{ip}:{STREMIO_PORT}")
+    return app
+
+
 def icon_url(app: dict) -> str | None:
     raw = app.get("httpIcon") or ""
     url = raw[raw.find("http"):] if "http" in raw else ""
@@ -312,6 +458,27 @@ class Handler(SimpleHTTPRequestHandler):
                 TV.close()
                 self._json(502, {"ok": False, "error": str(e)})
             return
+        if STREMIO_APP and (path == "/stremio" or path.startswith("/stremio/")):
+            if path == "/stremio":
+                self.send_response(301)
+                self.send_header("Location", "/stremio/" + ("?" + urlsplit(self.path).query if urlsplit(self.path).query else ""))
+                self.end_headers()
+                return
+            try:
+                got = STREMIO_APP.get(path[len("/stremio/"):], urlsplit(self.path).query)
+            except Exception as e:
+                log(f"{path}: {e}")
+                got = None
+            if not got:
+                self.send_error(404)
+                return
+            body, ctype = got
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path.startswith("/icon/"):
             try:
                 got = icon_bytes(path[len("/icon/"):])
@@ -351,7 +518,7 @@ class Handler(SimpleHTTPRequestHandler):
                     error = "That app is not on the TV."
                 else:
                     text = "Opening " + app.get("name", "the app").replace("▶", "").strip() + "…"
-                    TV.launch(app)
+                    TV.launch(launch_target(app))
                     HOME_WATCH.opened(str(app.get("appId")))
                     log(f"launched {app.get('name')} via /go")
             elif "source" in query:
@@ -399,7 +566,7 @@ setTimeout(function () {{ if (document.visibilityState === 'visible') location.r
                     self._json(404, {"ok": False, "error": "unknown app"})
                     return
                 t = time.time()
-                TV.launch(app)
+                TV.launch(launch_target(app))
                 HOME_WATCH.opened(str(app.get("appId")))
                 log(f"launched {app.get('name')} in {int((time.time() - t) * 1000)} ms")
                 self._json(200, {"ok": True})
@@ -624,9 +791,13 @@ def main():
     except Exception as e:
         log(f"address check failed: {e}")
     HOME_WATCH.start()
+    if STREMIO.get("server", True) and STREMIO_APP:
+        StremioServer().start()
     log("home takeover " + ("on" if takeover_on() else "off (VIDAA's own home)") +
         ": the launcher opens when the TV comes on or Netflix, YouTube or Prime Video closes")
     port = int(CONFIG.get("port", 8765))
+    # On Windows, address reuse lets a second helper share the port with one still running; fail instead.
+    ThreadingHTTPServer.allow_reuse_address = os.name != "nt"
     server = ThreadingHTTPServer(("0.0.0.0", port), partial(Handler, directory=str(WEB)))
     log(f"launcher on http://<this computer's ip>:{port}/  (serving {WEB})")
     server.serve_forever()
