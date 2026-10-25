@@ -15,7 +15,7 @@ The ground rules for changing this project, and for running it on your own TV. T
 - **Never commit or post:** the TV's IP, MAC or serial number, the pairing (`setup/session.json`, `~/.sidee/session.json`), Wi-Fi names, or Stremio account details.
 - `config.json`, `data/`, `reports/`, `web/apps.json`, `setup/session.json` and `*.zip` are git-ignored for that reason; keep them ignored. Share `config.example.json` instead.
 - **The kit zip (`setup/pack.py`) contains the pairing token.** Keep it off public places, and copy it only to your own machines.
-- **The repository stays private** until its owner decides to open-source it.
+- **The repository is public.** Check every commit for the items above before pushing.
 - Screenshots for issues: crop out the network panel and anything with an address in it.
 
 ## How the pieces fit
