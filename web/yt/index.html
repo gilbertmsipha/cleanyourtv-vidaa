@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>YouTube</title>
+<style>
+  @font-face { font-family: Outfit; src: url(../fonts/outfit.ttf) format("truetype"); font-weight: 100 900; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #0b0b0d; color: #fff;
+    font-family: Outfit, sans-serif; -webkit-font-smoothing: antialiased; }
+  #top { position: absolute; left: 96px; right: 96px; top: 44px; height: 84px; display: flex; align-items: center; gap: 28px; z-index: 3; }
+  #brand { font-size: 38px; font-weight: 600; letter-spacing: .01em; }
+  #brand b { display: inline-block; background: #e3242b; border-radius: 10px; padding: 0 14px; margin-right: 14px; font-weight: 600; }
+  #brand span { font-size: 22px; font-weight: 400; color: rgba(255,255,255,.5); margin-left: 12px; letter-spacing: .12em; text-transform: uppercase; }
+  .btn { height: 64px; padding: 0 30px; border-radius: 32px; background: rgba(255,255,255,.08); font-size: 28px;
+    display: flex; align-items: center; gap: 14px; color: rgba(255,255,255,.8); transition: transform .15s, background .15s; }
+  .btn.focus { background: #fff; color: #000; transform: scale(1.06); }
+  #searchBtn { margin-left: auto; min-width: 420px; }
+  #rows { position: absolute; left: 0; right: 0; top: 160px; bottom: 0; overflow: hidden; }
+  #rowsInner { position: absolute; left: 0; right: 0; top: 0; transition: transform .28s cubic-bezier(.2,.8,.2,1); }
+  .row { height: 400px; position: relative; }
+  .row h2 { margin: 0 0 18px 96px; font-size: 32px; font-weight: 500; color: rgba(255,255,255,.85); }
+  .strip { position: absolute; left: 96px; top: 62px; display: flex; gap: 32px; transition: transform .25s cubic-bezier(.2,.8,.2,1); }
+  .card { width: 400px; flex: none; }
+  .thumb { width: 400px; height: 225px; border-radius: 16px; background: #222 center/cover; position: relative;
+    transition: transform .18s, box-shadow .18s; }
+  .card.focus .thumb { transform: scale(1.07); box-shadow: 0 0 0 5px #fff, 0 18px 50px rgba(0,0,0,.6); }
+  .dur { position: absolute; right: 12px; bottom: 10px; background: rgba(0,0,0,.8); border-radius: 8px; padding: 2px 10px; font-size: 22px; }
+  .prog { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; background: rgba(255,255,255,.25); border-radius: 0 0 16px 16px; overflow: hidden; }
+  .prog i { display: block; height: 100%; background: #e3242b; }
+  .title { margin-top: 18px; font-size: 25px; line-height: 1.25; height: 62px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: rgba(255,255,255,.75); }
+  .card.focus .title { color: #fff; }
+  .chan { margin-top: 6px; font-size: 21px; color: rgba(255,255,255,.45); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #msg { position: absolute; left: 0; right: 0; top: 480px; text-align: center; font-size: 34px; color: rgba(255,255,255,.55); }
+
+  /* search: on-screen keyboard */
+  #search { position: absolute; inset: 0; background: #0b0b0d; z-index: 6; display: none; }
+  #search.open { display: block; }
+  #q { position: absolute; left: 160px; top: 130px; right: 160px; height: 96px; border-bottom: 3px solid rgba(255,255,255,.3); font-size: 56px; line-height: 96px; white-space: nowrap; overflow: hidden; }
+  #q:empty::before { content: 'Search YouTube'; color: rgba(255,255,255,.3); }
+  #keys { position: absolute; left: 160px; top: 290px; }
+  .key { position: absolute; height: 84px; border-radius: 14px; background: rgba(255,255,255,.08); font-size: 34px; display: flex; align-items: center; justify-content: center; transition: transform .12s; }
+  .key.focus { background: #fff; color: #000; transform: scale(1.08); }
+  #sugg { position: absolute; left: 1320px; top: 290px; width: 480px; }
+  #sugg .s { font-size: 30px; padding: 16px 24px; border-radius: 14px; color: rgba(255,255,255,.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #sugg .s.focus { background: #fff; color: #000; }
+
+  /* player */
+  #player { position: absolute; inset: 0; background: #000; z-index: 10; display: none; }
+  #player.open { display: block; }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
+  #osd { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 96px 70px; background: linear-gradient(transparent, rgba(0,0,0,.85) 45%);
+    opacity: 0; transition: opacity .3s; height: 330px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: flex-end; }
+  #osd.show { opacity: 1; }
+  #osdTitle { font-size: 40px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #osdSub { font-size: 25px; color: rgba(255,255,255,.6); margin: 8px 0 26px; }
+  #bar { height: 8px; background: rgba(255,255,255,.25); border-radius: 4px; position: relative; }
+  #bar i { position: absolute; left: 0; top: 0; bottom: 0; background: #e3242b; border-radius: 4px; }
+  #bar b { position: absolute; top: -9px; width: 26px; height: 26px; margin-left: -13px; border-radius: 50%; background: #fff; }
+  #times { display: flex; justify-content: space-between; font-size: 26px; color: rgba(255,255,255,.75); margin-top: 16px; }
+  #badge { position: absolute; right: 96px; top: 60px; font-size: 24px; padding: 6px 16px; border-radius: 10px; background: rgba(0,0,0,.6); opacity: 0; transition: opacity .3s; }
+  #osd.show ~ #badge { opacity: 1; }
+  #center { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 40px; color: rgba(255,255,255,.85); text-align: center; }
+  .spin { width: 80px; height: 80px; border-radius: 50%; border: 7px solid rgba(255,255,255,.2); border-top-color: #fff; animation: sp 1s linear infinite; margin: 0 auto; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #toast { position: absolute; left: 50%; top: 70px; transform: translateX(-50%); background: rgba(20,20,22,.92); border-radius: 18px; padding: 16px 30px; font-size: 28px; opacity: 0; transition: opacity .3s; z-index: 20; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div id="top">
+  <div id="brand"><b>▶</b>YouTube<span>No ads</span></div>
+  <div class="btn" id="homeBtn">Home</div>
+  <div class="btn" id="searchBtn">🔍&nbsp; Search</div>
+</div>
+<div id="rows"><div id="rowsInner"></div></div>
+<div id="msg"><div class="spin"></div></div>
+
+<div id="search"><div id="q"></div><div id="keys"></div><div id="sugg"></div></div>
+
+<div id="player">
+  <video id="v" preload="auto"></video>
+  <div id="center"></div>
+  <div id="osd"><div id="osdTitle"></div><div id="osdSub"></div><div id="bar"><i></i><b></b></div><div id="times"><span id="tNow">0:00</span><span id="tEnd"></span></div></div>
+  <div id="badge"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var back = (/[?&]back=([^&]+)/.exec(location.search) || [])[1];
+  back = back ? decodeURIComponent(back) : '/';
+
+  function get(url) { return fetch(url, { cache: 'no-store' }).then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || r.status); return j; }); }); }
+  function post(path, body) { return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(function () {}); }
+  var toastT;
+  function toast(m) { $('toast').textContent = m; $('toast').classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { $('toast').classList.remove('show'); }, 3000); }
+  function fmt(s) { s = Math.max(0, Math.floor(s)); var h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = s % 60;
+    return (h ? h + ':' + (m < 10 ? '0' : '') : '') + m + ':' + (x < 10 ? '0' : '') + x; }
+  function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k) || 'null'); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
+
+  // ---------- what the TV can decode: 4K needs VP9 or AV1, since YouTube has no 4K H.264 ----------
+  var CAPS = { codecs: ['avc1'], height: 1080, max: 1080 };
+  function probe() {
+    // VP9 first: TV chips decode it in hardware, while AV1 may be software-decoded by the browser and stutter at 4K.
+    var tests = [['vp9', 'vp09.00.51.08'], ['av01', 'av01.0.12M.08'], ['avc1', 'avc1.640033']];
+    var v = document.createElement('video');
+    var screenH = Math.max(screen.height * (window.devicePixelRatio || 1), 1080);
+    function one(t) {
+      var type = 'video/mp4; codecs="' + t[1] + '"';
+      var basic = v.canPlayType(type) || (window.MediaSource && MediaSource.isTypeSupported(type) ? 'maybe' : '');
+      if (!basic) return Promise.resolve(null);
+      if (!navigator.mediaCapabilities) return Promise.resolve({ c: t[0], h: t[0] === 'avc1' ? 1080 : 2160 });
+      var at = function (w, h) { return navigator.mediaCapabilities.decodingInfo({ type: 'file', video: { contentType: type, width: w, height: h, bitrate: h > 1080 ? 20e6 : 6e6, framerate: 60 } }); };
+      return at(3840, 2160).then(function (r) {
+        if (r.supported && r.smooth !== false) return { c: t[0], h: 2160 };
+        return at(1920, 1080).then(function (r2) { return r2.supported ? { c: t[0], h: 1080 } : null; });
+      }).catch(function () { return { c: t[0], h: 1080 }; });
+    }
+    return Promise.all(tests.map(one)).then(function (res) {
+      var ok = res.filter(Boolean);
+      var forced = store('yt-quality');
+      CAPS.codecs = ok.map(function (r) { return r.c; });
+      if (CAPS.codecs.indexOf('avc1') < 0) CAPS.codecs.push('avc1');
+      CAPS.height = CAPS.max = Math.max.apply(null, ok.map(function (r) { return r.h; }).concat([1080]));
+      if (forced) CAPS.height = Math.min(CAPS.height, forced);
+      post('/api/yt/log', { msg: 'decoders ' + JSON.stringify(res) + ' screen ' + screen.width + 'x' + screen.height + ' dpr ' + window.devicePixelRatio });
+    });
+  }
+
+  // ---------- browse: rows of videos ----------
+  var rows = [], focus = { area: 'rows', r: 0, c: 0, top: 1 }, rowEls = [];
+  function card(it) {
+    var el = document.createElement('div'); el.className = 'card';
+    var th = document.createElement('div'); th.className = 'thumb'; th.style.backgroundImage = 'url(' + it.thumb + ')';
+    if (it.duration) { var d = document.createElement('div'); d.className = 'dur'; d.textContent = fmt(it.duration); th.appendChild(d); }
+    var pos = (store('yt-pos') || {})[it.id];
+    if (pos && it.duration) { var p = document.createElement('div'); p.className = 'prog'; p.innerHTML = '<i style="width:' + Math.min(100, pos / it.duration * 100) + '%"></i>'; th.appendChild(p); }
+    var t = document.createElement('div'); t.className = 'title'; t.textContent = it.title;
+    var c = document.createElement('div'); c.className = 'chan'; c.textContent = it.channel || '';
+    el.appendChild(th); el.appendChild(t); el.appendChild(c); return el;
+  }
+  function historyRow() {
+    var h = (store('yt-history') || []).slice(0, 20);
+    return h.length ? [{ title: 'Continue watching', items: h }] : [];
+  }
+  function showRows(list) {
+    rows = list.filter(function (r) { return r.items && r.items.length; });
+    var box = $('rowsInner'); box.innerHTML = ''; rowEls = [];
+    rows.forEach(function (r) {
+      var el = document.createElement('div'); el.className = 'row';
+      var h = document.createElement('h2'); h.textContent = r.title; el.appendChild(h);
+      var strip = document.createElement('div'); strip.className = 'strip';
+      r.items.forEach(function (it) { strip.appendChild(card(it)); });
+      el.appendChild(strip); box.appendChild(el); rowEls.push(strip);
+    });
+    $('msg').innerHTML = rows.length ? '' : 'Nothing here yet. Try Search.';
+    focus.r = 0; focus.c = 0; focus.area = rows.length ? 'rows' : 'top'; focus.top = 1;
+    render();
+  }
+  function render() {
+    $('homeBtn').classList.toggle('focus', focus.area === 'top' && focus.top === 0);
+    $('searchBtn').classList.toggle('focus', focus.area === 'top' && focus.top === 1);
+    rowEls.forEach(function (strip, r) {
+      Array.prototype.forEach.call(strip.children, function (c, i) { c.classList.toggle('focus', focus.area === 'rows' && r === focus.r && i === focus.c); });
+      var first = r === focus.r ? Math.max(0, focus.c - 2) : 0;
+      strip.style.transform = 'translateX(' + (-first * 432) + 'px)';
+    });
+    $('rowsInner').style.transform = 'translateY(' + (-Math.max(0, focus.r - 0) * 400) + 'px)';
+  }
+  function loadHome() {
+    $('msg').innerHTML = '<div class="spin"></div>';
+    showRows(historyRow());
+    get('/api/yt/home').then(function (j) { showRows(historyRow().concat(j.rows)); }, function (e) { $('msg').textContent = 'YouTube did not answer: ' + e.message; });
+  }
+  function doSearch(q) {
+    $('msg').innerHTML = '<div class="spin"></div>'; showRows([]); $('msg').innerHTML = '<div class="spin"></div>';
+    var recent = (store('yt-searches') || []).filter(function (x) { return x !== q; }); recent.unshift(q); store('yt-searches', recent.slice(0, 12));
+    get('/api/yt/search?q=' + encodeURIComponent(q)).then(function (j) { showRows([{ title: 'Results for “' + q + '”', items: j.items }]); },
+      function (e) { $('msg').textContent = 'Search failed: ' + e.message; });
+  }
+
+  // ---------- search screen ----------
+  var ROWS = ['1234567890', 'qwertyuiop', 'asdfghjkl\'', 'zxcvbnm,.-'].map(function (r) { return r.split('').map(function (c) { return { label: c, ch: c, w: 1 }; }); });
+  ROWS.push([{ label: 'Space', ch: ' ', w: 4 }, { label: '⌫', act: 'del', w: 2 }, { label: 'Clear', act: 'clear', w: 2 }, { label: 'Search', act: 'go', w: 2 }]);
+  var kb = { q: '', r: 1, c: 0, area: 'keys', s: 0, list: [] }, built = false;
+  function buildKeys() {
+    var box = $('keys');
+    ROWS.forEach(function (row, r) { var x = 0; row.forEach(function (k) {
+      var el = document.createElement('div'); el.className = 'key'; el.textContent = k.label;
+      el.style.left = x * 104 + 'px'; el.style.top = r * 100 + 'px'; el.style.width = (k.w * 104 - 12) + 'px';
+      box.appendChild(el); k.el = el; x += k.w; }); });
+    built = true;
+  }
+  function renderKb() {
+    $('q').textContent = kb.q;
+    ROWS.forEach(function (row, r) { row.forEach(function (k, c) { k.el.classList.toggle('focus', kb.area === 'keys' && r === kb.r && c === kb.c); }); });
+    var box = $('sugg'); box.innerHTML = '';
+    kb.list.forEach(function (t, i) { var d = document.createElement('div'); d.className = 's' + (kb.area === 'sugg' && i === kb.s ? ' focus' : ''); d.textContent = t; box.appendChild(d); });
+  }
+  var suggT;
+  function suggest() {
+    clearTimeout(suggT);
+    if (!kb.q) { kb.list = (store('yt-searches') || []).slice(0, 8); renderKb(); return; }
+    suggT = setTimeout(function () { get('/api/suggest?q=' + encodeURIComponent(kb.q)).then(function (l) { kb.list = l; renderKb(); }, function () {}); }, 250);
+  }
+  function openSearch() { if (!built) buildKeys(); kb.area = 'keys'; $('search').classList.add('open'); focus.area = 'search'; suggest(); renderKb(); }
+  function closeSearch() { $('search').classList.remove('open'); focus.area = rows.length ? 'rows' : 'top'; render(); }
+  function kbKey(k) {
+    var row = ROWS[kb.r];
+    if (kb.area === 'sugg') {
+      if (k === 38) kb.s = Math.max(0, kb.s - 1);
+      else if (k === 40) kb.s = Math.min(kb.list.length - 1, kb.s + 1);
+      else if (k === 37) kb.area = 'keys';
+      else if (k === 13 && kb.list[kb.s]) { closeSearch(); doSearch(kb.list[kb.s]); return; }
+      renderKb(); return;
+    }
+    if (k === 37) kb.c = Math.max(0, kb.c - 1);
+    else if (k === 39) { if (kb.c < row.length - 1) kb.c++; else if (kb.list.length) { kb.area = 'sugg'; kb.s = 0; } }
+    else if (k === 38 || k === 40) {
+      var nr = Math.max(0, Math.min(ROWS.length - 1, kb.r + (k === 40 ? 1 : -1)));
+      var x = 0; for (var i = 0; i < kb.c; i++) x += row[i].w;
+      var nx = 0, nc = 0; ROWS[nr].forEach(function (kk, j) { if (nx <= x) nc = j; nx += kk.w; });
+      kb.r = nr; kb.c = nc;
+    } else if (k === 13) {
+      var key = row[kb.c];
+      if (key.act === 'del') kb.q = kb.q.slice(0, -1);
+      else if (key.act === 'clear') kb.q = '';
+      else if (key.act === 'go') { if (kb.q.trim()) { closeSearch(); doSearch(kb.q.trim()); return; } }
+      else kb.q += key.ch;
+      suggest();
+    }
+    renderKb();
+  }
+
+  // ---------- player ----------
+  var P = { id: null, meta: null, offset: 0, seekTarget: null, seekT: 0, osdT: 0, segs: [], playing: false, retried: false, list: [], idx: -1 };
+  var v = $('v');
+  function now() { return P.offset + (v.currentTime || 0); }
+  function showOsd(sticky) {
+    $('osd').classList.add('show'); clearTimeout(P.osdT);
+    if (!sticky) P.osdT = setTimeout(function () { if (!v.paused) $('osd').classList.remove('show'); }, 4000);
+  }
+  function paintOsd() {
+    var d = P.meta ? P.meta.duration : 0, t = P.seekTarget !== null ? P.seekTarget : now();
+    $('tNow').textContent = fmt(t); $('tEnd').textContent = P.meta && P.meta.live ? 'LIVE' : d ? fmt(d) : '';
+    var pct = d ? Math.min(100, t / d * 100) : 0;
+    $('bar').firstChild.style.width = pct + '%'; $('bar').lastChild.style.left = pct + '%';
+  }
+  setInterval(function () {
+    if (!P.id) return;
+    paintOsd();
+    var t = now();
+    // SponsorBlock: skip sponsor reads, self-promotion, intros and "like and subscribe" segments.
+    for (var i = 0; i < P.segs.length; i++) {
+      var s = P.segs[i];
+      if (!s.done && t >= s.segment[0] && t < s.segment[1] - 1) { s.done = true; toast('Skipped ' + (s.category === 'sponsor' ? 'sponsor' : s.category.replace('selfpromo', 'self-promotion'))); seekTo(s.segment[1]); return; }
+    }
+    if (P.meta && !P.meta.live && P.playing && Math.floor(t) % 5 === 0) savePos(t);
+  }, 500);
+  function savePos(t) {
+    var pos = store('yt-pos') || {};
+    if (P.meta.duration && t > P.meta.duration - 20) delete pos[P.id]; else pos[P.id] = Math.floor(t);
+    store('yt-pos', pos);
+  }
+  function remember(it) {
+    var h = (store('yt-history') || []).filter(function (x) { return x.id !== it.id; });
+    h.unshift({ id: it.id, title: it.title, channel: it.channel, duration: it.duration, thumb: 'https://i.ytimg.com/vi/' + it.id + '/mqdefault.jpg' });
+    store('yt-history', h.slice(0, 40));
+  }
+  function startAt(t) {
+    P.offset = t; P.seekTarget = null;
+    $('center').innerHTML = '<div class="spin"></div>';
+    v.src = '/yt/stream?id=' + P.id + '&t=' + Math.floor(t) + '&c=' + CAPS.codecs.join(',') + '&h=' + CAPS.height;
+    v.play().catch(function () { v.muted = true; v.play().catch(function () {}); toast('Press any button for sound'); });
+  }
+  function seekTo(t) {
+    if (!P.meta || P.meta.live) return;
+    t = Math.max(0, Math.min(t, (P.meta.duration || 1e9) - 3));
+    startAt(t);
+  }
+  function play(it, list, idx) {
+    P.id = it.id; P.meta = null; P.segs = []; P.retried = false; P.list = list || []; P.idx = idx || 0;
+    $('player').classList.add('open'); focus.area = 'player';
+    $('osdTitle').textContent = it.title || ''; $('osdSub').textContent = it.channel || ''; $('badge').textContent = '';
+    $('center').innerHTML = '<div class="spin"></div>'; showOsd(true);
+    get('/api/yt/info?id=' + it.id + '&c=' + CAPS.codecs.join(',') + '&h=' + CAPS.height).then(function (m) {
+      if (P.id !== it.id) return;
+      P.meta = m; remember(m);
+      $('osdTitle').textContent = m.title; $('osdSub').textContent = m.channel;
+      $('badge').textContent = (m.live ? 'LIVE · ' : '') + m.height + 'p' + (m.fps > 30 ? m.fps : '') + ' · ' + ({ av01: 'AV1', vp9: 'VP9', avc1: 'H.264' }[m.codec] || m.codec);
+      var resume = (store('yt-pos') || {})[it.id] || 0;
+      startAt(resume > 10 ? resume - 3 : 0);
+      if (resume > 10) toast('Resuming at ' + fmt(resume));
+      fetch('https://sponsor.ajay.app/api/skipSegments?videoID=' + it.id + '&categories=' + encodeURIComponent('["sponsor","selfpromo","interaction","intro","outro"]'))
+        .then(function (r) { return r.ok ? r.json() : []; }).then(function (s) { if (P.id === it.id) P.segs = s || []; }, function () {});
+    }, function (e) { $('center').textContent = 'This video can’t be played: ' + e.message; });
+  }
+  v.addEventListener('playing', function () { P.playing = true; $('center').innerHTML = ''; showOsd(); });
+  v.addEventListener('waiting', function () { $('center').innerHTML = '<div class="spin"></div>'; });
+  v.addEventListener('pause', function () { P.playing = false; showOsd(true); });
+  v.addEventListener('error', function () {
+    if (!P.id) return;
+    // A codec the TV said it could decode but couldn't: fall back to H.264 once.
+    if (!P.retried && CAPS.codecs[0] !== 'avc1') {
+      P.retried = true;
+      post('/api/yt/log', { msg: 'playback error ' + (v.error && v.error.code) + ' with ' + CAPS.codecs.join(',') + '; falling back to H.264' });
+      CAPS.codecs = ['avc1']; CAPS.height = CAPS.max = 1080; store('yt-quality', 1080);
+      toast('Switching to 1080p (this TV could not play 4K here)');
+      startAt(now()); return;
+    }
+    $('center').textContent = 'Playback stopped. Press OK to retry.';
+  });
+  v.addEventListener('ended', function () {
+    if (P.meta && P.meta.live) return;
+    savePos(1e9);
+    var next = P.list[P.idx + 1];
+    if (next) { play(next, P.list, P.idx + 1); return; }
+    get('/api/yt/related?id=' + P.id).then(function (j) { if (j.items && j.items[0]) play(j.items[0], j.items, 0); else closePlayer(); }, closePlayer);
+  });
+  function closePlayer() {
+    if (P.meta && !P.meta.live) savePos(now());
+    v.pause(); v.removeAttribute('src'); v.load();
+    P.id = null; $('player').classList.remove('open');
+    focus.area = rows.length ? 'rows' : 'top';
+    // refresh the progress bars on the cards
+    if (rows.length && rows[0].title === 'Continue watching') { var keep = rows.slice(1); showRows(historyRow().concat(keep)); } else render();
+  }
+  function playerKey(k) {
+    if (k === 8 || k === 461 || k === 27 || k === 413) { closePlayer(); return; }
+    if (k === 13 || k === 415 || k === 19 || k === 10252) {
+      if ($('center').textContent.indexOf('retry') >= 0) { startAt(now()); return; }
+      if (P.seekTarget !== null) { clearTimeout(P.seekT); seekTo(P.seekTarget); return; }
+      if (v.paused) v.play(); else v.pause();
+      showOsd(); return;
+    }
+    if (k === 37 || k === 39 || k === 412 || k === 417) {
+      if (!P.meta || P.meta.live) return;
+      var step = (k === 37 || k === 412) ? -10 : 10;
+      var base = P.seekTarget !== null ? P.seekTarget : now();
+      // Holding the key speeds up: 10 s steps, then 30 s, then 60 s.
+      P.seekRepeat = (Date.now() - (P.lastSeek || 0) < 400) ? (P.seekRepeat || 0) + 1 : 0; P.lastSeek = Date.now();
+      step *= P.seekRepeat > 12 ? 6 : P.seekRepeat > 4 ? 3 : 1;
+      P.seekTarget = Math.max(0, Math.min(base + step, P.meta.duration - 3));
+      showOsd(); paintOsd();
+      clearTimeout(P.seekT); P.seekT = setTimeout(function () { seekTo(P.seekTarget); }, 900);
+      return;
+    }
+    if (k === 40 && $('osd').classList.contains('show') && P.meta && !P.meta.live) {
+      // Down (with the bar showing) steps the quality down, wrapping back to the best: for slow Wi-Fi.
+      var steps = [2160, 1440, 1080, 720].filter(function (h) { return h <= (CAPS.max || 1080); });
+      var i = steps.indexOf(CAPS.height);
+      CAPS.height = steps[(i + 1) % steps.length];
+      store('yt-quality', CAPS.height === steps[0] ? null : CAPS.height);
+      toast('Quality: up to ' + (CAPS.height === 2160 ? '4K' : CAPS.height + 'p'));
+      $('badge').textContent = 'up to ' + CAPS.height + 'p';
+      startAt(now()); showOsd(); return;
+    }
+    if (k === 38 || k === 40) showOsd();
+  }
+
+  // ---------- keys ----------
+  document.addEventListener('keydown', function (e) {
+    if (v.muted) v.muted = false;   // started muted because the browser blocked sound before a key press
+    var k = e.keyCode;
+    e.preventDefault();
+    if (focus.area === 'player') { playerKey(k); return; }
+    if (focus.area === 'search') { if (k === 8 || k === 461 || k === 27) closeSearch(); else kbKey(k); return; }
+    if (k === 8 || k === 461 || k === 27) {
+      if (focus.area === 'rows' && focus.r > 0) { focus.r = 0; focus.c = 0; render(); return; }
+      location.replace(back); return;
+    }
+    if (focus.area === 'top') {
+      if (k === 37) focus.top = 0; else if (k === 39) focus.top = 1;
+      else if (k === 40 && rows.length) focus.area = 'rows';
+      else if (k === 13) { if (focus.top === 1) { openSearch(); return; } loadHome(); return; }
+      render(); return;
+    }
+    var row = rows[focus.r];
+    if (k === 37) focus.c = Math.max(0, focus.c - 1);
+    else if (k === 39) focus.c = Math.min(row.items.length - 1, focus.c + 1);
+    else if (k === 38) { if (focus.r === 0) focus.area = 'top'; else { focus.r--; focus.c = Math.min(focus.c, rows[focus.r].items.length - 1); } }
+    else if (k === 40) { if (focus.r < rows.length - 1) { focus.r++; focus.c = Math.min(focus.c, rows[focus.r].items.length - 1); } }
+    else if (k === 13) { play(row.items[focus.c], row.items, focus.c); return; }
+    render();
+  });
+
+  probe().then(loadHome, loadHome);
+})();
+</script>
+</body>
+</html>

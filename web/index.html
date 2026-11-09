@@ -506,6 +506,13 @@
     t.classList.add('press');
     setTimeout(function () { t.classList.remove('press'); }, 160);
     if (app.browser) { openBrowser(); return; }
+    if (app.page) {
+      // A screen the helper serves (YouTube without ads, Live TV): go there, and it comes back here on Back.
+      try { sessionStorage.setItem('cyt-focus', String(focus.index)); } catch (e) {}
+      var base = state.static ? state.helper : '';
+      setTimeout(function () { location.href = base + app.page + '?back=' + encodeURIComponent(location.href); }, 120);
+      return;
+    }
     if (state.static) {
       // A native app needs the helper. This https page may not call a LAN http address, but it may navigate to
       // one: the helper opens the app and sends the browser back here. An app that works better through the helper
@@ -747,6 +754,8 @@
   var helperArg = /[?&]helper=([^&]+)/.exec(location.search);
   state.helper = helperArg && /^https?:\/\//.test(decodeURIComponent(helperArg[1])) ? decodeURIComponent(helperArg[1]).replace(/\/+$/, '') : '';
 
+  var PAGES = [{ appId: 'cyt-yt', name: 'YouTube', page: '/yt/', icon: 'pages/yt.png' },
+               { appId: 'cyt-tv', name: 'Live TV', page: '/livetv/', icon: 'pages/livetv.png' }];
   function start(s) {
     state.loaded = s;
     var apps = s.apps || [], dockSize = s.dock_size;
@@ -758,6 +767,9 @@
       state.removedCount = removed.length;
       // apps.json lists every app once; the dock depends on whether native apps can be opened.
       apps = apps.filter(function (a) { return !a.native || state.helper; });
+      // The helper's own screens, when there is a helper; icons come with this page, since it may not load http images.
+      if (state.helper) apps = apps.map(function (a) { return a.helper_name ? Object.assign({}, a, { name: a.helper_name }) : a; });
+      if (state.helper) PAGES.forEach(function (p) { if (removed.indexOf(p.appId) < 0) apps.push(p); });
       var dock = (state.helper && s.helper_dock) || s.dock || [];
       var rank = function (a) { var i = dock.indexOf(a.appId); return i < 0 ? dock.length : i; };
       apps = apps.map(function (a, i) { return { a: a, i: i }; })

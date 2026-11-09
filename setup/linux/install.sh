@@ -12,7 +12,7 @@ command -v python3 >/dev/null || sudo pacman -S --needed --noconfirm python
 # Stremio's streaming server (the helper downloads it) runs on Node and transcodes with ffmpeg.
 command -v node >/dev/null && command -v ffmpeg >/dev/null || sudo pacman -S --needed --noconfirm nodejs ffmpeg
 python3 -m venv "$DIR/.venv"
-"$DIR/.venv/bin/pip" install -q "paho-mqtt==2.1.0"
+"$DIR/.venv/bin/pip" install -q "paho-mqtt==2.1.0" yt-dlp yt-dlp-ejs truststore
 
 echo "2/5  TV pairing"
 mkdir -p "$HOME/.sidee"

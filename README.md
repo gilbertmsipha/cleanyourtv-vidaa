@@ -34,6 +34,8 @@ CleanYourTV works by talking to Android TVs over ADB: it disables junk apps and 
 | Remove apps from Home (hold OK) | Yes | Hidden from the launcher; the app stays installed |
 | Home appears when the TV is switched on, and when Netflix, YouTube or Prime Video closes | With the helper | The helper watches the TV and opens the launcher (VIDAA's home flashes for ~2 s first) |
 | Stremio with your addons, torrents and transcoding | With the helper | The helper serves [Stremio for VIDAA](https://github.com/NoobyGains/stremio-vidaa-tv) itself and keeps Stremio's streaming server running ([below](#stremio)) |
+| YouTube without ads, up to 4K | With the helper | A **YouTube** tile of the launcher's own: the helper gets the video with [yt-dlp](https://github.com/yt-dlp/yt-dlp) (ads are separate videos, so they never come) and joins picture and sound with ffmpeg, no re-encoding. Skips sponsor segments ([SponsorBlock](https://sponsor.ajay.app/)) ([below](#youtube-without-ads)) |
+| Free live TV channels | With the helper | A **Live TV** tile with the free, public channels of [iptv-org](https://github.com/iptv-org/iptv) (the lists VLC opens): your countries first, then English channels by category, zapped with Up/Down ([below](#live-tv)) |
 | A browser: search with Brave, open websites | With the helper | The Search pill (or the Browser tile) types with the remote, shows suggestions as you type, then opens the page in the TV Browser ([below](#browser)) |
 | Go back to VIDAA's own home | With the helper | **VIDAA** pill: *Switch to VIDAA Home* turns the automatic Home off; the same pill turns it back on |
 | Replace VIDAA's home outright | **No** | VIDAA has no setting for it; the Home button still goes to VIDAA's home |
@@ -127,7 +129,8 @@ A tile can't be changed once added (adding the same id again is ignored), so get
 
 ### 5. Keep the helper running
 
-- **Windows:** `powershell -ExecutionPolicy Bypass -File setup\windows\install.ps1` adds a logon task that runs it hidden and restarts it if it stops. Make sure the PC doesn't sleep.
+- **Windows, on a spare PC:** unpack the kit from `setup/pack.py` and run `powershell -ExecutionPolicy Bypass -File cyt-vidaa\setup\windows\setup-kit.ps1`. It installs Python, yt-dlp, Node.js and ffmpeg, moves the pairing into place, opens the firewall ports, turns off sleep (lid included) and adds the logon task. If the PC's name is the same as your account's, rename the PC first: Windows then can't tell them apart.
+- **Windows, this PC:** `powershell -ExecutionPolicy Bypass -File setup\windows\install.ps1` adds a logon task that runs it hidden and restarts it if it stops. Make sure the PC doesn't sleep.
 - **Linux (systemd):** `bash setup/linux/install.sh` installs a user service that starts at boot, opens port 8765 in ufw and disables sleep, including on lid close. To move a working setup to another computer, `python setup/pack.py` makes a zip with the code, Sidee's core and the pairing. Keep that zip private.
 
 ### Browser
@@ -177,6 +180,25 @@ The Stremio tile opens the helper's copy, already pointed at the server. Sign in
 
 Stremio desktop on the same computer keeps working: opened after the helper, it uses the helper's server. If Stremio desktop was opened first, its own server holds the port and keeps the TV out; close Stremio desktop, and the helper starts its server within 30 seconds.
 
+### YouTube without ads
+
+The **YouTube** tile (`cyt-yt`) is a screen the helper serves. Put it in your dock in place of the YouTube app with `"dock": ["1", "cyt-yt", …]`; the app stays in the grid, renamed with `"rename": {"3": "YouTube app"}`.
+
+- **Browse:** rows of videos (Continue watching, your channels, a few searches), and **Search** with the on-screen keyboard.
+- **Watch:** **OK** pauses, **Left/Right** skip 10 s (hold to go faster), **Down** with the bar showing steps the quality down for slow Wi-Fi, **Back** returns. It resumes where you stopped and plays something related at the end.
+- **4K:** YouTube has 4K only in VP9 and AV1, not H.264. The screen asks the TV's browser which it decodes at 2160p, prefers VP9 (hardware-decoded on TV chips; AV1 may be software), and falls back to 1080p H.264 if playback fails. What the TV reported is in the helper's log (`YouTube page: decoders`).
+- **How:** the helper asks [yt-dlp](https://github.com/yt-dlp/yt-dlp) for the video and audio streams and ffmpeg copies them into one fragmented MP4 (`/yt/stream`), so the laptop's CPU barely works; seeking restarts the stream at the new time. yt-dlp is updated nightly, since YouTube changes often.
+- **Settings** (`youtube` in `config.json`): `max_height` (default 2160), `channels` (`[{"name": "…", "id": "UC…"}]`, shown as rows from their RSS feeds), `home_searches`.
+- No sign-in: subscriptions and history stay on the TV, not in a Google account.
+
+### Live TV
+
+The **Live TV** tile (`cyt-tv`) plays the free channels collected by [iptv-org](https://github.com/iptv-org/iptv): publicly available streams, the same M3U lists VLC opens.
+
+- It starts on the last channel you watched. **Up/Down** change channel, **OK** shows what's on, **Back** opens the guide; in the guide **hold OK** to add a channel to Favourites, and **Back** from the categories leaves.
+- Rows: the countries in `livetv.countries` (default Zimbabwe and South Africa), then channels in `livetv.languages` (default `eng`) by category.
+- Streams are HLS, played with [hls.js](https://github.com/video-dev/hls.js) through the helper's `/proxy`, since channel servers rarely allow other sites. Many free channels are off air at any moment: the helper checks every channel daily and moves those that don't answer to the end of their list, dimmed.
+
 ## Using it
 
 | Remote | On a tile | In the dock |
@@ -225,6 +247,10 @@ Read [docs/GUIDELINES.md](docs/GUIDELINES.md) first, and [docs/CHALLENGES.md](do
 - [CleanYourTV](https://github.com/Gathin23/cleanyourtv) by Gathin (MIT): the idea, and the launcher design and values this page reproduces
 - [Sidee](https://github.com/Empi9245/Sidee) by Empi9245 (MIT): VIDAA pairing and the remote-control client this helper uses
 - [vidaa-launcher](https://github.com/Zfinix/vidaa-launcher) by Zfinix (MIT): the idea of a watcher that reopens the launcher
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense) and [FFmpeg](https://ffmpeg.org/) (LGPL/GPL): YouTube streams, run as separate programs
+- [SponsorBlock](https://sponsor.ajay.app/) (data CC BY-NC-SA 4.0): sponsor segments to skip
+- [iptv-org/iptv](https://github.com/iptv-org/iptv) (Unlicense): the free channel lists
+- [hls.js](https://github.com/video-dev/hls.js) (Apache-2.0, `web/vendor/hls.min.js`): HLS playback
 - [Outfit](https://github.com/Outfitio/Outfit-Fonts) font (SIL Open Font License, `web/fonts/OFL.txt`)
 
 ## License
