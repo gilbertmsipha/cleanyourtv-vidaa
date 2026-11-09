@@ -24,6 +24,14 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
+try:
+    # Trust the computer's own certificate store, so antivirus that inspects HTTPS (Kaspersky, ESET...) doesn't
+    # break channel streams and downloads with "self-signed certificate in certificate chain".
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "config.json"
 if not CONFIG_PATH.exists():
@@ -31,12 +39,15 @@ if not CONFIG_PATH.exists():
 CONFIG = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 sys.path.insert(0, str((CONFIG_PATH.parent / CONFIG.get("sidee_dir", "../sidee")).resolve()))
 from core import client, protocol  # noqa: E402  (Sidee)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import extras  # noqa: E402
 
 WEB = ROOT / "web"
 DATA = ROOT / "data"
 ICONS = DATA / "icons"
 APPS_CACHE = DATA / "apps.json"
 HIDDEN_FILE = DATA / "hidden.json"
+ORDER_FILE = DATA / "order.json"   # the tile order chosen on the TV (Move in the tile menu)
 TAKEOVER_FILE = DATA / "takeover.json"
 
 
@@ -57,6 +68,13 @@ ALLOWED_KEYS = {"KEY_MENU", "KEY_HOME", "KEY_EXIT", "KEY_RETURNS", "KEY_INPUT", 
 
 def log(msg: str) -> None:
     print(time.strftime("%H:%M:%S ") + msg, flush=True)
+
+
+YT = extras.YouTube(CONFIG.get("youtube") or {}, ROOT / "data", log)
+LIVETV = extras.LiveTV(CONFIG.get("livetv") or {}, ROOT / "data", log)
+# Screens this helper serves itself, shown on the launcher like apps. Their ids go in config "dock" like any app's.
+PAGES = [{"appId": "cyt-yt", "name": "YouTube", "page": "/yt/", "icon": "/pages/yt.png"},
+         {"appId": "cyt-tv", "name": "Live TV", "page": "/livetv/", "icon": "/pages/livetv.png"}]
 
 
 class TvLink:
@@ -206,17 +224,35 @@ class Apps:
     def restore_all(self):
         HIDDEN_FILE.unlink(missing_ok=True)
 
+    @staticmethod
+    def order() -> list:
+        return json.loads(ORDER_FILE.read_text(encoding="utf-8")) if ORDER_FILE.exists() else []
+
+    @staticmethod
+    def set_order(ids: list | None):
+        DATA.mkdir(exist_ok=True)
+        if ids:
+            ORDER_FILE.write_text(json.dumps([str(i) for i in ids][:200]), encoding="utf-8")
+        else:
+            ORDER_FILE.unlink(missing_ok=True)
+
     def for_launcher(self) -> list:
         hidden = set(CONFIG.get("hidden", [])) | set(self.removed())
         with self.lock:
             apps = [a for a in self.apps if str(a.get("appId")) not in hidden and not str(a.get("appId")).startswith("cyt")]
+        # The helper's screens come first among the apps that aren't in the dock (the sort below is stable).
+        apps = [p for p in PAGES if p["appId"] not in hidden] + apps
         dock = [str(x) for x in CONFIG.get("dock", [])]
-        order = {app_id: i for i, app_id in enumerate(dock)}
+        # The order arranged on the TV wins; apps it hasn't seen yet (newly installed) go at the end.
+        order = {app_id: i for i, app_id in enumerate(self.order() or dock)}
         apps.sort(key=lambda a: order.get(str(a.get("appId")), len(order)))
         out = []
         for a in apps:
-            entry = {"appId": str(a["appId"]), "name": a.get("name", "").replace("▶", "").strip(),
-                     "icon": f"/icon/{a['appId']}"}
+            if a.get("page"):
+                out.append(dict(a))
+                continue
+            name = CONFIG.get("rename", {}).get(str(a["appId"])) or a.get("name", "").replace("▶", "").strip()
+            entry = {"appId": str(a["appId"]), "name": name, "icon": f"/icon/{a['appId']}"}
             if a.get("url") == "browser":  # the launcher's Browser screen, which hands its searches to this app
                 entry.update(name="Browser", browser=True)
             out.append(entry)
@@ -496,7 +532,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {"apps": APPS.for_launcher(), "dock_size": len(CONFIG.get("dock", [])),
                              "greeting_name": CONFIG.get("greeting_name", ""),
                              "clock_24h": CONFIG.get("clock_24h", False), "sources": SOURCES.get(),
-                             "removed_count": len(APPS.removed()), "takeover": takeover_on(), "browser": BROWSER})
+                             "removed_count": len(APPS.removed()), "takeover": takeover_on(), "browser": BROWSER,
+                             "order_saved": bool(APPS.order())})
             return
         if path == "/api/suggest":
             query = parse_qs(urlsplit(self.path).query)
@@ -504,6 +541,9 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if path == "/go":
             self._go()
+            return
+        if path.startswith("/api/yt/") or path == "/yt/stream" or path in ("/api/livetv", "/proxy"):
+            self._extras(path, {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items()})
             return
         if path == "/api/sources":
             try:
@@ -551,6 +591,81 @@ class Handler(SimpleHTTPRequestHandler):
             return
         super().do_GET()
 
+    def _send(self, body: bytes, ctype: str, code: int = 200):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _pipe(self, ctype: str, chunks):
+        """Send a stream of unknown length; the TV closing the connection (a seek, Back) ends it."""
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        self.close_connection = True
+        try:
+            for b in chunks:
+                self.wfile.write(b)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            pass
+
+    def _extras(self, path: str, q: dict):
+        try:
+            codecs = [c for c in q.get("c", "avc1").split(",") if c in ("av01", "vp9", "avc1")] or ["avc1"]
+            height = max(144, min(int(q.get("h", "0") or 0) or YT.max_height, 4320))
+            if path == "/api/yt/home":
+                self._json(200, {"rows": YT.home()})
+            elif path == "/api/yt/search":
+                self._json(200, {"items": YT.search(q.get("q", ""))})
+            elif path == "/api/yt/info":
+                self._json(200, YT.public(q.get("id", ""), codecs, height))
+            elif path == "/api/yt/related":
+                self._json(200, {"items": YT.related(q.get("id", ""))})
+            elif path == "/yt/stream":
+                cmd = YT.stream_command(q.get("id", ""), float(q.get("t", "0") or 0), codecs, height)
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                log(f"YouTube {q.get('id')} from {q.get('t', '0')} s ({','.join(codecs)} up to {height}p)")
+
+                def chunks():
+                    while True:
+                        b = proc.stdout.read(65536)
+                        if not b:
+                            return
+                        yield b
+                try:
+                    self._pipe("video/mp4", chunks())
+                finally:
+                    proc.kill()
+            elif path == "/api/livetv":
+                self._json(200, {"groups": LIVETV.get()})
+            elif path == "/proxy":
+                url = q.get("u", "")
+                if urlsplit(url).scheme not in ("http", "https"):
+                    self.send_error(400)
+                    return
+                code, ctype, body = extras.proxy_fetch(url, q.get("ref", ""), q.get("ua", ""))
+                if isinstance(body, bytes):
+                    self._send(body, ctype)
+                else:
+                    self._pipe(ctype, body)
+        except Exception as e:
+            log(f"{path} failed: {e}")
+            try:
+                self._json(502, {"ok": False, "error": str(e)[:300]})
+            except OSError:
+                pass
+
+    @staticmethod
+    def _with_order(back: str) -> str:
+        """The hosted page keeps its own copy of the tile order; every trip through /go brings it the current one."""
+        if not any(back.startswith(o.rstrip("/") + "/") for o in CONFIG.get("launcher_origins", [])):
+            return back
+        return back.split("#")[0] + "#order=" + (",".join(APPS.order()) or "default")
+
     def _go(self):
         """GET /go?app=ID | ?source=ID | ?browse=URL | ?key=KEY, plus &back=URL. The https launcher navigates here, since it may
         not fetch a LAN http address but may navigate to one. Shows a black page while the TV acts, then returns to
@@ -562,6 +677,11 @@ class Handler(SimpleHTTPRequestHandler):
             back = "/"
         error, text, wait = "", "", 7000
         try:
+            if "order" in query:
+                # From the hosted page, which may not call this helper but may navigate to it.
+                APPS.set_order([i for i in query["order"].split(",") if i] if query["order"] != "default" else None)
+                log("tile order " + ("reset" if query["order"] == "default" else "saved"))
+                wait = 300
             if query.get("takeover") in ("on", "off"):
                 set_takeover(query["takeover"] == "on")
                 log("home takeover switched " + query["takeover"])
@@ -592,7 +712,7 @@ class Handler(SimpleHTTPRequestHandler):
                 TV.send_key(query["key"])
                 log(f"sent {query['key']} via /go")
                 text, wait = "", 300
-            elif "takeover" not in query:
+            elif "takeover" not in query and "order" not in query:
                 error = "Unknown request."
         except Exception as e:
             log(f"/go failed: {e}")
@@ -602,7 +722,7 @@ class Handler(SimpleHTTPRequestHandler):
 <style>html,body{{margin:0;height:100%;background:#000;color:rgba(255,255,255,.7);font:300 40px sans-serif;
 display:flex;align-items:center;justify-content:center}}</style></head><body>{html.escape(error or text)}
 <script>
-var back = {json.dumps(back)};
+var back = {json.dumps(self._with_order(back))};
 // If an app or input took over, this page is hidden; if not (or it failed), go back to the launcher.
 setTimeout(function () {{ if (document.visibilityState === 'visible') location.replace(back); }}, {3000 if error else wait});
 </script></body></html>""".encode()
@@ -657,6 +777,18 @@ setTimeout(function () {{ if (document.visibilityState === 'visible') location.r
                 (reports / time.strftime("report-%Y%m%d-%H%M%S.json")).write_text(text, encoding="utf-8")
                 (reports / "latest.json").write_text(text, encoding="utf-8")
                 log(f"report from {self.client_address[0]}: {data.get('page', 'probe')}")
+                self._json(200, {"ok": True})
+                return
+            if path == "/api/order":
+                APPS.set_order(data.get("order") or None)
+                self._json(200, {"ok": True})
+                return
+            if path == "/api/livetv/report":
+                LIVETV.report(str(data.get("url", "")), bool(data.get("ok")))
+                self._json(200, {"ok": True})
+                return
+            if path in ("/api/yt/log", "/api/log"):
+                log(("YouTube page: " if path == "/api/yt/log" else "") + str(data.get("msg", ""))[:300])
                 self._json(200, {"ok": True})
                 return
             if path == "/api/refresh":
@@ -844,6 +976,27 @@ class HomeWatch(threading.Thread):
 HOME_WATCH = HomeWatch()
 
 
+def keep_ytdlp_fresh():
+    """YouTube changes often and yt-dlp follows within days: update it nightly, and restart the helper when it changed
+    (the logon task starts it again within a minute)."""
+    def version():
+        try:
+            from importlib.metadata import version as v
+            return v("yt-dlp")
+        except Exception:
+            return ""
+    while True:
+        time.sleep(max(60, (4 - time.localtime().tm_hour) % 24 * 3600 - time.localtime().tm_min * 60) if version() else 60)
+        before = version()
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--disable-pip-version-check", "-U", "yt-dlp", "yt-dlp-ejs"],
+                       capture_output=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        after = version()
+        if after and after != before:
+            log(f"yt-dlp updated {before or '(none)'} -> {after}; restarting")
+            os._exit(1)
+        time.sleep(3600)
+
+
 def main():
     try:
         APPS.refresh()
@@ -856,6 +1009,9 @@ def main():
     HOME_WATCH.start()
     if STREMIO.get("server", True) and STREMIO_APP:
         StremioServer().start()
+    threading.Thread(target=LIVETV.sweeper, daemon=True).start()
+    threading.Thread(target=YT.home, daemon=True).start()          # warm the YouTube start screen
+    threading.Thread(target=keep_ytdlp_fresh, daemon=True).start()
     log("home takeover " + ("on" if takeover_on() else "off (VIDAA's own home)") +
         ": the launcher opens when the TV comes on or Netflix, YouTube or Prime Video closes")
     port = int(CONFIG.get("port", 8765))

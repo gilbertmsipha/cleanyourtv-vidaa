@@ -64,6 +64,10 @@
   .tile .label { font-size: 30px; font-weight: 500; padding: 0 20px; text-align: center; }
   .tile.focus { transform: scale(1.1); }
   .tile.press { transform: scale(1.03); transition-duration: .12s; }
+  /* Move mode: the tile lifts and follows the arrows. */
+  .tile.moving { transform: scale(1.16) translateY(-14px); box-shadow: 0 26px 50px rgba(0,0,0,.7), 0 0 0 4px rgba(255,255,255,.9); z-index: 2;
+                 animation: wiggle .9s ease-in-out infinite; }
+  @keyframes wiggle { 0%, 100% { rotate: -1.2deg; } 50% { rotate: 1.2deg; } }
   .name { position: absolute; width: var(--tile-w); text-align: center; font-size: 28px; font-weight: 500; letter-spacing: .02em;
           color: rgba(255,255,255,.95); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
           opacity: 0; transform: translateY(-12px); transition: opacity .25s ease, transform .25s ease; }
@@ -434,7 +438,8 @@
     var app = focused();
     if (!app) return;
     menu.app = app; menu.kind = 'tile';
-    var items = [{ label: 'Remove from Home', act: 'remove' }];
+    var items = [{ label: 'Move', act: 'move' }, { label: 'Remove from Home', act: 'remove' }];
+    if (orderSaved()) items.push({ label: 'Reset the order', act: 'reset-order' });
     if (state.removedCount) items.push({ label: 'Restore removed apps (' + state.removedCount + ')', act: 'restore' });
     items.push({ label: 'Cancel', act: 'cancel' });
     showMenu(app.name, items);
@@ -469,6 +474,8 @@
     var it = menu.items[menu.index], app = menu.app;
     closeMenu();
     if (!it || it.act === 'cancel') return;
+    if (it.act === 'move') { startMove(); return; }
+    if (it.act === 'reset-order') { saveOrder(null); return; }
     if (it.act === 'vidaa-off' || it.act === 'takeover-on' || it.act === 'vidaa-home') {
       var on = it.act === 'takeover-on';
       if (it.act !== 'vidaa-home') { try { localStorage.setItem('cyt-takeover', on ? 'on' : 'off'); } catch (e) {} state.takeover = on; }
@@ -483,6 +490,45 @@
         .then(function () { return load('/api/state'); }).then(start, function () { toast('Cannot reach the helper'); });
     }
     if (it.act === 'remove') toast(app.name + ' removed from Home. It is still installed on the TV.');
+  }
+
+  // ---------- arranging tiles: hold OK → Move, arrows carry the tile (the first four are the dock), OK drops it ----------
+  var moving = { from: -1, order: null };
+  function localOrder() { try { return JSON.parse(localStorage.getItem('cyt-order') || 'null'); } catch (e) { return null; } }
+  function setLocalOrder(ids) { try { if (ids) localStorage.setItem('cyt-order', JSON.stringify(ids)); else localStorage.removeItem('cyt-order'); } catch (e) {} }
+  function orderSaved() { return state.static ? !!localOrder() : !!(state.loaded && state.loaded.order_saved); }
+  function startMove() {
+    moving.from = focus.index; moving.order = state.apps.slice();
+    focus.area = 'move';
+    render(); tiles[focus.index].classList.add('moving');
+    toast('Use the arrows to move ' + state.apps[focus.index].name + ', then OK to place it. Back cancels.');
+  }
+  function moveKey(dx, dy) {
+    var i = focus.index, dock = Math.min(state.dockSize, state.apps.length);
+    if (i < dock && dy < 0) return;                       // nothing above the dock but the header
+    focus.area = i < dock ? 'dock' : 'grid';
+    move(dx, dy);                                          // where focus would go is where the tile goes
+    var j = focus.index;
+    focus.area = 'move';
+    if (j !== i) { var app = state.apps.splice(i, 1)[0]; state.apps.splice(j, 0, app); build(); }
+    render(); tiles[j].classList.add('moving');
+  }
+  function endMove(keep) {
+    if (!keep) state.apps = moving.order;
+    focus.area = focus.index < state.dockSize ? 'dock' : 'grid';
+    build(); render();
+    if (keep && moving.from !== focus.index) saveOrder(state.apps.map(function (a) { return a.appId; }));
+  }
+  function saveOrder(ids) {
+    if (!state.static) {
+      post('/api/order', { order: ids }).then(function () { return load('/api/state'); }).then(start, function () { toast('Cannot reach the helper'); });
+    } else {
+      setLocalOrder(ids);
+      start(state.loaded);
+      // Keep the helper's copy the same, so the screen it opens by itself shows this order too.
+      if (state.helper) viaHelper('order=' + encodeURIComponent(ids ? ids.join(',') : 'default'));
+    }
+    toast(ids ? 'Saved. Your tiles stay in this order.' : 'Back to the original order.');
   }
 
   function activate() {
@@ -506,6 +552,13 @@
     t.classList.add('press');
     setTimeout(function () { t.classList.remove('press'); }, 160);
     if (app.browser) { openBrowser(); return; }
+    if (app.page) {
+      // A screen the helper serves (YouTube without ads, Live TV): go there, and it comes back here on Back.
+      try { sessionStorage.setItem('cyt-focus', String(focus.index)); } catch (e) {}
+      var base = state.static ? state.helper : '';
+      setTimeout(function () { location.href = base + app.page + '?back=' + encodeURIComponent(location.href); }, 120);
+      return;
+    }
     if (state.static) {
       // A native app needs the helper. This https page may not call a LAN http address, but it may navigate to
       // one: the helper opens the app and sends the browser back here. An app that works better through the helper
@@ -541,6 +594,13 @@
   document.addEventListener('keydown', function (e) {
     var k = e.keyCode, handled = true;
     if (focus.area === 'browser') { browserKey(e); return; }
+    if (focus.area === 'move') {
+      if (k === 37) moveKey(-1, 0); else if (k === 39) moveKey(1, 0); else if (k === 38) moveKey(0, -1); else if (k === 40) moveKey(0, 1);
+      else if (k === 13 && !e.repeat) endMove(true);
+      else if (k === 8 || k === 461 || k === 27) endMove(false);
+      e.preventDefault();
+      return;
+    }
     if (focus.area === 'menu') {
       if (k === 38 || k === 40) { menu.index = Math.max(0, Math.min(menu.items.length - 1, menu.index + (k === 40 ? 1 : -1))); renderMenu(); }
       else if (k === 13 && !e.repeat) activate();
@@ -744,9 +804,16 @@
   if (document.fonts) document.fonts.ready.then(function () { lastMinute = -1; tick(); });   // the date's fit, in the real font
   function load(url) { return fetch(url, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw r.status; return r.json(); }); }
   // ?helper=http://<lan ip>:8765 in the tile's address: native apps are shown and opened through that helper.
+  var orderArg = /[#&]order=([^&]*)/.exec(location.hash);
+  if (orderArg) {
+    setLocalOrder(orderArg[1] === 'default' || !orderArg[1] ? null : decodeURIComponent(orderArg[1]).split(','));
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  }
   var helperArg = /[?&]helper=([^&]+)/.exec(location.search);
   state.helper = helperArg && /^https?:\/\//.test(decodeURIComponent(helperArg[1])) ? decodeURIComponent(helperArg[1]).replace(/\/+$/, '') : '';
 
+  var PAGES = [{ appId: 'cyt-yt', name: 'YouTube', page: '/yt/', icon: 'pages/yt.png' },
+               { appId: 'cyt-tv', name: 'Live TV', page: '/livetv/', icon: 'pages/livetv.png' }];
   function start(s) {
     state.loaded = s;
     var apps = s.apps || [], dockSize = s.dock_size;
@@ -758,11 +825,14 @@
       state.removedCount = removed.length;
       // apps.json lists every app once; the dock depends on whether native apps can be opened.
       apps = apps.filter(function (a) { return !a.native || state.helper; });
-      var dock = (state.helper && s.helper_dock) || s.dock || [];
+      // The helper's own screens, when there is a helper; icons come with this page, since it may not load http images.
+      if (state.helper) apps = apps.map(function (a) { return a.helper_name ? Object.assign({}, a, { name: a.helper_name }) : a; });
+      if (state.helper) PAGES.forEach(function (p) { if (removed.indexOf(p.appId) < 0) apps.push(p); });
+      var dock = localOrder() || (state.helper && s.helper_dock) || s.dock || [];
       var rank = function (a) { var i = dock.indexOf(a.appId); return i < 0 ? dock.length : i; };
       apps = apps.map(function (a, i) { return { a: a, i: i }; })
         .sort(function (x, y) { return rank(x.a) - rank(y.a) || x.i - y.i; }).map(function (x) { return x.a; });
-      dockSize = apps.filter(function (a) { return dock.indexOf(a.appId) >= 0; }).length;
+      dockSize = localOrder() ? COLS : apps.filter(function (a) { return dock.indexOf(a.appId) >= 0; }).length;
     }
     state.apps = apps;
     state.dockSize = Math.min(dockSize || 4, COLS, state.apps.length);

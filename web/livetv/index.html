@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080">
+<title>Live TV</title>
+<style>
+  @font-face { font-family: Outfit; src: url(../fonts/outfit.ttf) format("truetype"); font-weight: 100 900; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; color: #fff;
+    font-family: Outfit, sans-serif; -webkit-font-smoothing: antialiased; }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
+  #guide { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,10,16,.97) 0, rgba(8,10,16,.93) 62%, rgba(8,10,16,.55));
+    display: none; z-index: 5; }
+  #guide.open { display: block; }
+  #head { position: absolute; left: 80px; top: 50px; font-size: 40px; font-weight: 600; }
+  #head span { font-size: 22px; font-weight: 400; color: rgba(255,255,255,.45); margin-left: 18px; letter-spacing: .1em; text-transform: uppercase; }
+  #cats { position: absolute; left: 60px; top: 140px; bottom: 40px; width: 360px; overflow: hidden; }
+  #catsIn { transition: transform .22s; }
+  .cat { font-size: 29px; padding: 14px 24px; border-radius: 14px; color: rgba(255,255,255,.6); display: flex; justify-content: space-between; }
+  .cat small { font-size: 22px; color: rgba(255,255,255,.35); }
+  .cat.sel { color: #fff; background: rgba(255,255,255,.08); }
+  .cat.focus { background: #fff; color: #000; }
+  .cat.focus small { color: rgba(0,0,0,.5); }
+  #chans { position: absolute; left: 460px; top: 140px; bottom: 40px; width: 760px; overflow: hidden; }
+  #chansIn { transition: transform .22s; }
+  .ch { height: 84px; display: flex; align-items: center; gap: 24px; padding: 0 22px; border-radius: 16px; font-size: 29px; color: rgba(255,255,255,.8); }
+  .ch img { width: 104px; height: 60px; object-fit: contain; flex: none; }
+  .ch .no { width: 64px; font-size: 22px; color: rgba(255,255,255,.35); flex: none; text-align: right; }
+  .ch .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .ch .st { font-size: 22px; color: #ffcf4d; }
+  .ch.dead { opacity: .35; }
+  .ch.playing .nm::after { content: ' ●'; color: #ff3b30; font-size: 22px; }
+  .ch.focus { background: #fff; color: #000; }
+  .ch.focus .no { color: rgba(0,0,0,.45); }
+  #hint { position: absolute; left: 80px; bottom: 26px; font-size: 22px; color: rgba(255,255,255,.4); }
+  #banner { position: absolute; left: 80px; bottom: 80px; display: flex; align-items: center; gap: 30px; background: rgba(10,12,18,.88);
+    border-radius: 24px; padding: 24px 40px 24px 28px; opacity: 0; transition: opacity .3s; z-index: 4; max-width: 1300px; }
+  #banner.show { opacity: 1; }
+  #banner img { width: 150px; height: 86px; object-fit: contain; }
+  #bNo { font-size: 54px; font-weight: 600; color: rgba(255,255,255,.5); }
+  #bName { font-size: 44px; font-weight: 500; }
+  #bSub { font-size: 24px; color: rgba(255,255,255,.55); margin-top: 4px; }
+  #center { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); font-size: 34px; color: rgba(255,255,255,.8); text-align: center; z-index: 3; }
+  .spin { width: 80px; height: 80px; border-radius: 50%; border: 7px solid rgba(255,255,255,.2); border-top-color: #fff; animation: sp 1s linear infinite; margin: 0 auto; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #toast { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); background: rgba(20,20,22,.92); border-radius: 18px; padding: 16px 30px; font-size: 28px; opacity: 0; transition: opacity .3s; z-index: 20; }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<video id="v" autoplay></video>
+<div id="center"><div class="spin"></div></div>
+<div id="banner"><div id="bNo"></div><img id="bLogo" alt=""><div><div id="bName"></div><div id="bSub"></div></div></div>
+<div id="guide">
+  <div id="head">Live TV<span>Free channels</span></div>
+  <div id="cats"><div id="catsIn"></div></div>
+  <div id="chans"><div id="chansIn"></div></div>
+  <div id="hint">OK: watch &nbsp;·&nbsp; Hold OK: add to / remove from Favourites &nbsp;·&nbsp; While watching: ▲▼ change channel · Back: this guide · Back from the categories: leave</div>
+</div>
+<div id="toast"></div>
+<script src="../vendor/hls.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var back = (/[?&]back=([^&]+)/.exec(location.search) || [])[1];
+  back = back ? decodeURIComponent(back) : '/';
+  function store(k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem(k) || 'null'); localStorage.setItem(k, JSON.stringify(v)); } catch (e) { return null; } }
+  function post(path, body) { return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(function () {}); }
+  var toastT;
+  function toast(m) { $('toast').textContent = m; $('toast').classList.add('show'); clearTimeout(toastT); toastT = setTimeout(function () { $('toast').classList.remove('show'); }, 3000); }
+
+  var groups = [], G = { cat: 0, ch: 0, area: 'chans', open: false };
+  var cur = { cat: 0, ch: 0, chan: null };
+  var v = $('v'), hls = null, watchdog = 0, bannerT = 0;
+
+  function favGroup() { return { name: '★ Favourites', channels: store('tv-favs') || [] }; }
+  function setGroups(list) {
+    // Channels that failed before go to the end of their list.
+    list.forEach(function (g) { g.channels.sort(function (a, b) { return (a.dead ? 1 : 0) - (b.dead ? 1 : 0); }); });
+    groups = [favGroup()].concat(list);
+  }
+
+  // ---------- playback: hls.js through the helper's /proxy (channel servers rarely allow other sites) ----------
+  function proxied(c) {
+    var o = c.opts || {};
+    return '/proxy?u=' + encodeURIComponent(c.url) + (o['http-referrer'] ? '&ref=' + encodeURIComponent(o['http-referrer']) : '') +
+      (o['http-user-agent'] ? '&ua=' + encodeURIComponent(o['http-user-agent']) : '');
+  }
+  function stop() { clearTimeout(watchdog); if (hls) { hls.destroy(); hls = null; } v.removeAttribute('src'); v.load(); }
+  function failed(c, why) {
+    if (cur.chan !== c) return;
+    stop(); post('/api/livetv/report', { url: c.url, ok: false }); c.dead = true;
+    $('center').innerHTML = 'This channel isn’t broadcasting right now.<br><span style="font-size:26px;color:rgba(255,255,255,.5)">▲▼ for another channel · Back for the guide</span>';
+    renderGuide();
+  }
+
+  // Ways to play a channel, smoothest first. The TV's own HLS player (if it has one) decodes in hardware and needs
+  // nothing else; hls.js does the work in the browser. Direct skips the laptop, for servers that allow other sites;
+  // through /proxy the laptop fetches segments ahead, so the TV never waits on a slow channel server.
+  var NATIVE = !!v.canPlayType('application/vnd.apple.mpegurl');
+  var HLSJS = !!(window.Hls && Hls.isSupported());
+  // A cushion of ~30 s, starting 4 segments behind the live edge: a slow segment no longer stalls the picture.
+  var HLS_CFG = { maxBufferLength: 30, maxMaxBufferLength: 60, backBufferLength: 20, liveSyncDurationCount: 4,
+    liveMaxLatencyDurationCount: 12, maxBufferHole: 1, highBufferWatchdogPeriod: 2, nudgeMaxRetry: 10,
+    startFragPrefetch: true, abrEwmaDefaultEstimate: 4e6, manifestLoadingMaxRetry: 3, levelLoadingMaxRetry: 4,
+    fragLoadingMaxRetry: 6, fragLoadingRetryDelay: 500, enableWorker: true, lowLatencyMode: false };
+  post('/api/log', { msg: 'Live TV player: native HLS ' + (NATIVE ? v.canPlayType('application/vnd.apple.mpegurl') : 'no') + ', hls.js ' + HLSJS });
+  function modes(c) {
+    var opts = c.opts && (c.opts['http-referrer'] || c.opts['http-user-agent']), list = [];
+    if (NATIVE) list.push({ name: 'tv', native: true, src: opts ? proxied(c) : c.url });
+    if (HLSJS && c.direct && !opts) list.push({ name: 'direct', src: c.url });
+    if (HLSJS) list.push({ name: 'laptop', src: proxied(c) });
+    if (NATIVE && !opts) list.push({ name: 'tv-laptop', native: true, src: proxied(c) });
+    // Start with what worked last time for this channel.
+    var good = (store('tv-mode') || {})[c.url];
+    list.sort(function (x, y) { return (y.name === good) - (x.name === good); });
+    return list;
+  }
+  function tune(cat, ch) {
+    var g = groups[cat], c = g && g.channels[ch];
+    if (!c) return;
+    cur = { cat: cat, ch: ch, chan: c, modes: modes(c), mode: -1 };
+    store('tv-last', { url: c.url, name: c.name, cat: g.name });
+    $('center').innerHTML = '<div class="spin"></div>';
+    banner();
+    next(c);
+    renderGuide();
+  }
+  function next(c) {
+    if (cur.chan !== c) return;
+    stop();
+    var m = cur.modes[++cur.mode];
+    if (!m) { failed(c, 'all'); return; }
+    cur.playing = m; cur.recovered = false;
+    if (m.native) v.src = m.src;
+    else {
+      hls = new Hls(HLS_CFG);
+      hls.on(Hls.Events.ERROR, function (e, d) {
+        if (!d.fatal || cur.chan !== c) return;
+        // A stall-type media error can often be recovered in place; anything else tries the next way.
+        if (d.type === Hls.ErrorTypes.MEDIA_ERROR && !cur.recovered) { cur.recovered = true; hls.recoverMediaError(); return; }
+        next(c);
+      });
+      hls.loadSource(m.src); hls.attachMedia(v);
+    }
+    v.play().catch(function () { v.muted = true; v.play().catch(function () {}); toast('Press any button for sound'); });
+    // No picture within 12 s: try the next way, and after the last, the channel counts as off air.
+    watchdog = setTimeout(function () { if (cur.chan === c && !(v.currentTime > 0)) next(c); }, 12000);
+  }
+  v.addEventListener('playing', function () {
+    $('center').innerHTML = ''; clearTimeout(watchdog);
+    var c = cur.chan;
+    if (!c) return;
+    if (c.dead !== false) { c.dead = false; post('/api/livetv/report', { url: c.url, ok: true }); }
+    if (cur.playing) { var m = store('tv-mode') || {}; if (m[c.url] !== cur.playing.name) { m[c.url] = cur.playing.name; store('tv-mode', m); } }
+  });
+  // The spinner shows only for a real stall, not for every short wait.
+  var waitT = 0;
+  v.addEventListener('waiting', function () { clearTimeout(waitT); waitT = setTimeout(function () { if (v.readyState < 3) $('center').innerHTML = '<div class="spin"></div>'; }, 700); });
+  v.addEventListener('canplay', function () { clearTimeout(waitT); if ($('center').querySelector('.spin')) $('center').innerHTML = ''; });
+  v.addEventListener('error', function () { if (cur.chan && cur.playing && cur.playing.native) next(cur.chan); });
+
+  function banner() {
+    var g = groups[cur.cat], c = cur.chan;
+    if (!c) return;
+    $('bNo').textContent = cur.ch + 1; $('bName').textContent = c.name; $('bSub').textContent = g.name;
+    $('bLogo').src = c.logo || ''; $('bLogo').style.visibility = c.logo ? 'visible' : 'hidden';
+    $('banner').classList.add('show'); clearTimeout(bannerT);
+    bannerT = setTimeout(function () { $('banner').classList.remove('show'); }, 4500);
+  }
+  function zap(d) {
+    var g = groups[cur.cat]; if (!g || !g.channels.length) return;
+    var n = (cur.ch + d + g.channels.length) % g.channels.length;
+    tune(cur.cat, n);
+  }
+
+  // ---------- guide ----------
+  function renderGuide() {
+    if (!G.open) return;
+    var ci = $('catsIn'); ci.innerHTML = '';
+    groups.forEach(function (g, i) {
+      var d = document.createElement('div');
+      d.className = 'cat' + (i === G.cat ? (G.area === 'cats' ? ' focus' : ' sel') : '');
+      d.innerHTML = '<span></span><small></small>'; d.firstChild.textContent = g.name; d.lastChild.textContent = g.channels.length;
+      ci.appendChild(d);
+    });
+    ci.style.transform = 'translateY(' + (-Math.max(0, G.cat - 6) * 66) + 'px)';
+    var g = groups[G.cat], box = $('chansIn'); box.innerHTML = '';
+    var first = Math.max(0, G.ch - 5), last = Math.min(g.channels.length, first + 12);   // only what's on screen
+    box.style.transform = 'translateY(0)';
+    for (var i = first; i < last; i++) {
+      var c = g.channels[i], d = document.createElement('div');
+      d.className = 'ch' + (c.dead ? ' dead' : '') + (G.area === 'chans' && i === G.ch ? ' focus' : '') + (cur.chan && c.url === cur.chan.url ? ' playing' : '');
+      d.innerHTML = '<div class="no"></div><img alt=""><div class="nm"></div>' + (isFav(c) ? '<div class="st">★</div>' : '');
+      d.children[0].textContent = i + 1; d.children[2].textContent = c.name;
+      if (c.logo) d.children[1].src = c.logo; else d.children[1].style.visibility = 'hidden';
+      d.children[1].onerror = function () { this.style.visibility = 'hidden'; };
+      box.appendChild(d);
+    }
+    if (!g.channels.length) box.innerHTML = '<div class="ch" style="color:rgba(255,255,255,.45)">' + (G.cat === 0 ? 'Hold OK on a channel to add it here.' : 'No channels.') + '</div>';
+  }
+  function openGuide() {
+    G.open = true; G.cat = cur.chan ? cur.cat : (groups.length > 1 ? 1 : 0); G.ch = cur.chan ? cur.ch : 0;
+    if (!groups[G.cat].channels.length) G.cat = 1;
+    G.area = 'chans'; $('guide').classList.add('open'); renderGuide();
+  }
+  function closeGuide() { G.open = false; $('guide').classList.remove('open'); }
+  function isFav(c) { return (store('tv-favs') || []).some(function (f) { return f.url === c.url; }); }
+  function toggleFav(c) {
+    var favs = store('tv-favs') || [], had = favs.some(function (f) { return f.url === c.url; });
+    favs = had ? favs.filter(function (f) { return f.url !== c.url; }) : favs.concat([{ name: c.name, url: c.url, logo: c.logo, opts: c.opts }]);
+    store('tv-favs', favs); groups[0] = favGroup();
+    toast(had ? 'Removed from Favourites' : 'Added to Favourites ★');
+    if (G.cat === 0) G.ch = Math.min(G.ch, Math.max(0, groups[0].channels.length - 1));
+    renderGuide();
+  }
+
+  // OK held = favourite. Activation waits for keyup (or a short timer on remotes that send none).
+  var ok = { pending: false, timer: 0 };
+  function okDown(e) {
+    if (ok.pending) { clearTimeout(ok.timer); ok.pending = false; var c = groups[G.cat].channels[G.ch]; if (c) toggleFav(c); return; }
+    ok.pending = true;
+    ok.timer = setTimeout(function () { if (ok.pending) { ok.pending = false; guideOk(); } }, 450);
+  }
+  document.addEventListener('keyup', function (e) { if (e.keyCode === 13 && ok.pending && G.open) { clearTimeout(ok.timer); ok.pending = false; guideOk(); } });
+  function guideOk() {
+    if (G.area === 'cats') { G.area = 'chans'; G.ch = 0; renderGuide(); return; }
+    if (!groups[G.cat].channels[G.ch]) return;
+    closeGuide(); tune(G.cat, G.ch);
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (v.muted) v.muted = false;   // started muted because the browser blocked sound before a key press
+    var k = e.keyCode; e.preventDefault();
+    var isBack = k === 8 || k === 461 || k === 27;
+    if (!G.open) {
+      if (k === 38 || k === 33 || k === 427) zap(-1);
+      else if (k === 40 || k === 34 || k === 428) zap(1);
+      else if (k === 13 || k === 37 || k === 39) { if (k === 13 && $('banner').classList.contains('show')) openGuide(); else banner(); }
+      else if (isBack) openGuide();
+      return;
+    }
+    // Back: channels → categories → leave Live TV (to the launcher).
+    if (isBack) { if (G.area === 'chans') { G.area = 'cats'; renderGuide(); } else { stop(); location.replace(back); } return; }
+    if (k === 13) { if (!e.repeat || ok.pending) okDown(e); return; }
+    var g = groups[G.cat];
+    if (G.area === 'cats') {
+      if (k === 38) G.cat = Math.max(0, G.cat - 1);
+      else if (k === 40) G.cat = Math.min(groups.length - 1, G.cat + 1);
+      else if (k === 39) { G.area = 'chans'; G.ch = 0; }
+      if (k === 38 || k === 40) G.ch = 0;
+    } else {
+      if (k === 38) G.ch = Math.max(0, G.ch - 1);
+      else if (k === 40) G.ch = Math.min(g.channels.length - 1, G.ch + 1);
+      else if (k === 33) G.ch = Math.max(0, G.ch - 10);
+      else if (k === 34) G.ch = Math.min(g.channels.length - 1, G.ch + 10);
+      else if (k === 37) G.area = 'cats';
+    }
+    renderGuide();
+  });
+  fetch('/api/livetv', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+    setGroups(j.groups || []);
+    $('center').innerHTML = '';
+    // Like a TV: start on the last channel watched.
+    var last = store('tv-last');
+    if (last) for (var i = 0; i < groups.length; i++) {
+      if (groups[i].name !== last.cat) continue;
+      for (var n = 0; n < groups[i].channels.length; n++) if (groups[i].channels[n].url === last.url) { tune(i, n); return; }
+    }
+    openGuide();
+  }, function () { $('center').textContent = 'Could not load the channel list.'; });
+})();
+</script>
+</body>
+</html>
