@@ -94,31 +94,72 @@
     $('center').innerHTML = 'This channel isn’t broadcasting right now.<br><span style="font-size:26px;color:rgba(255,255,255,.5)">▲▼ for another channel · Back for the guide</span>';
     renderGuide();
   }
+
+  // Ways to play a channel, smoothest first. The TV's own HLS player (if it has one) decodes in hardware and needs
+  // nothing else; hls.js does the work in the browser. Direct skips the laptop, for servers that allow other sites;
+  // through /proxy the laptop fetches segments ahead, so the TV never waits on a slow channel server.
+  var NATIVE = !!v.canPlayType('application/vnd.apple.mpegurl');
+  var HLSJS = !!(window.Hls && Hls.isSupported());
+  // A cushion of ~30 s, starting 4 segments behind the live edge: a slow segment no longer stalls the picture.
+  var HLS_CFG = { maxBufferLength: 30, maxMaxBufferLength: 60, backBufferLength: 20, liveSyncDurationCount: 4,
+    liveMaxLatencyDurationCount: 12, maxBufferHole: 1, highBufferWatchdogPeriod: 2, nudgeMaxRetry: 10,
+    startFragPrefetch: true, abrEwmaDefaultEstimate: 4e6, manifestLoadingMaxRetry: 3, levelLoadingMaxRetry: 4,
+    fragLoadingMaxRetry: 6, fragLoadingRetryDelay: 500, enableWorker: true, lowLatencyMode: false };
+  post('/api/log', { msg: 'Live TV player: native HLS ' + (NATIVE ? v.canPlayType('application/vnd.apple.mpegurl') : 'no') + ', hls.js ' + HLSJS });
+  function modes(c) {
+    var opts = c.opts && (c.opts['http-referrer'] || c.opts['http-user-agent']), list = [];
+    if (NATIVE) list.push({ name: 'tv', native: true, src: opts ? proxied(c) : c.url });
+    if (HLSJS && c.direct && !opts) list.push({ name: 'direct', src: c.url });
+    if (HLSJS) list.push({ name: 'laptop', src: proxied(c) });
+    if (NATIVE && !opts) list.push({ name: 'tv-laptop', native: true, src: proxied(c) });
+    // Start with what worked last time for this channel.
+    var good = (store('tv-mode') || {})[c.url];
+    list.sort(function (x, y) { return (y.name === good) - (x.name === good); });
+    return list;
+  }
   function tune(cat, ch) {
     var g = groups[cat], c = g && g.channels[ch];
     if (!c) return;
-    cur = { cat: cat, ch: ch, chan: c };
+    cur = { cat: cat, ch: ch, chan: c, modes: modes(c), mode: -1 };
     store('tv-last', { url: c.url, name: c.name, cat: g.name });
-    stop();
     $('center').innerHTML = '<div class="spin"></div>';
     banner();
-    var src = proxied(c);
-    if (window.Hls && Hls.isSupported()) {
-      hls = new Hls({ maxBufferLength: 20, backBufferLength: 30, manifestLoadingMaxRetry: 2, levelLoadingMaxRetry: 2, fragLoadingMaxRetry: 3 });
-      hls.on(Hls.Events.ERROR, function (e, d) { if (d.fatal) failed(c, d.details); });
-      hls.loadSource(src); hls.attachMedia(v);
-    } else v.src = src;
-    v.play().catch(function () { v.muted = true; v.play().catch(function () {}); toast('Press any button for sound'); });
-    // No picture within 20 s counts as a dead channel.
-    watchdog = setTimeout(function () { if (cur.chan === c && !(v.currentTime > 0)) failed(c, 'timeout'); }, 20000);
+    next(c);
     renderGuide();
+  }
+  function next(c) {
+    if (cur.chan !== c) return;
+    stop();
+    var m = cur.modes[++cur.mode];
+    if (!m) { failed(c, 'all'); return; }
+    cur.playing = m; cur.recovered = false;
+    if (m.native) v.src = m.src;
+    else {
+      hls = new Hls(HLS_CFG);
+      hls.on(Hls.Events.ERROR, function (e, d) {
+        if (!d.fatal || cur.chan !== c) return;
+        // A stall-type media error can often be recovered in place; anything else tries the next way.
+        if (d.type === Hls.ErrorTypes.MEDIA_ERROR && !cur.recovered) { cur.recovered = true; hls.recoverMediaError(); return; }
+        next(c);
+      });
+      hls.loadSource(m.src); hls.attachMedia(v);
+    }
+    v.play().catch(function () { v.muted = true; v.play().catch(function () {}); toast('Press any button for sound'); });
+    // No picture within 12 s: try the next way, and after the last, the channel counts as off air.
+    watchdog = setTimeout(function () { if (cur.chan === c && !(v.currentTime > 0)) next(c); }, 12000);
   }
   v.addEventListener('playing', function () {
     $('center').innerHTML = ''; clearTimeout(watchdog);
-    if (cur.chan && cur.chan.dead !== false) { cur.chan.dead = false; post('/api/livetv/report', { url: cur.chan.url, ok: true }); }
+    var c = cur.chan;
+    if (!c) return;
+    if (c.dead !== false) { c.dead = false; post('/api/livetv/report', { url: c.url, ok: true }); }
+    if (cur.playing) { var m = store('tv-mode') || {}; if (m[c.url] !== cur.playing.name) { m[c.url] = cur.playing.name; store('tv-mode', m); } }
   });
-  v.addEventListener('waiting', function () { $('center').innerHTML = '<div class="spin"></div>'; });
-  v.addEventListener('error', function () { if (!hls && cur.chan) failed(cur.chan, 'native'); });
+  // The spinner shows only for a real stall, not for every short wait.
+  var waitT = 0;
+  v.addEventListener('waiting', function () { clearTimeout(waitT); waitT = setTimeout(function () { if (v.readyState < 3) $('center').innerHTML = '<div class="spin"></div>'; }, 700); });
+  v.addEventListener('canplay', function () { clearTimeout(waitT); if ($('center').querySelector('.spin')) $('center').innerHTML = ''; });
+  v.addEventListener('error', function () { if (cur.chan && cur.playing && cur.playing.native) next(cur.chan); });
 
   function banner() {
     var g = groups[cur.cat], c = cur.chan;

@@ -47,6 +47,7 @@ DATA = ROOT / "data"
 ICONS = DATA / "icons"
 APPS_CACHE = DATA / "apps.json"
 HIDDEN_FILE = DATA / "hidden.json"
+ORDER_FILE = DATA / "order.json"   # the tile order chosen on the TV (Move in the tile menu)
 TAKEOVER_FILE = DATA / "takeover.json"
 
 
@@ -223,6 +224,18 @@ class Apps:
     def restore_all(self):
         HIDDEN_FILE.unlink(missing_ok=True)
 
+    @staticmethod
+    def order() -> list:
+        return json.loads(ORDER_FILE.read_text(encoding="utf-8")) if ORDER_FILE.exists() else []
+
+    @staticmethod
+    def set_order(ids: list | None):
+        DATA.mkdir(exist_ok=True)
+        if ids:
+            ORDER_FILE.write_text(json.dumps([str(i) for i in ids][:200]), encoding="utf-8")
+        else:
+            ORDER_FILE.unlink(missing_ok=True)
+
     def for_launcher(self) -> list:
         hidden = set(CONFIG.get("hidden", [])) | set(self.removed())
         with self.lock:
@@ -230,7 +243,8 @@ class Apps:
         # The helper's screens come first among the apps that aren't in the dock (the sort below is stable).
         apps = [p for p in PAGES if p["appId"] not in hidden] + apps
         dock = [str(x) for x in CONFIG.get("dock", [])]
-        order = {app_id: i for i, app_id in enumerate(dock)}
+        # The order arranged on the TV wins; apps it hasn't seen yet (newly installed) go at the end.
+        order = {app_id: i for i, app_id in enumerate(self.order() or dock)}
         apps.sort(key=lambda a: order.get(str(a.get("appId")), len(order)))
         out = []
         for a in apps:
@@ -518,7 +532,8 @@ class Handler(SimpleHTTPRequestHandler):
             self._json(200, {"apps": APPS.for_launcher(), "dock_size": len(CONFIG.get("dock", [])),
                              "greeting_name": CONFIG.get("greeting_name", ""),
                              "clock_24h": CONFIG.get("clock_24h", False), "sources": SOURCES.get(),
-                             "removed_count": len(APPS.removed()), "takeover": takeover_on(), "browser": BROWSER})
+                             "removed_count": len(APPS.removed()), "takeover": takeover_on(), "browser": BROWSER,
+                             "order_saved": bool(APPS.order())})
             return
         if path == "/api/suggest":
             query = parse_qs(urlsplit(self.path).query)
@@ -636,14 +651,20 @@ class Handler(SimpleHTTPRequestHandler):
                 if isinstance(body, bytes):
                     self._send(body, ctype)
                 else:
-                    with body:
-                        self._pipe(ctype, iter(lambda: body.read(65536), b""))
+                    self._pipe(ctype, body)
         except Exception as e:
             log(f"{path} failed: {e}")
             try:
                 self._json(502, {"ok": False, "error": str(e)[:300]})
             except OSError:
                 pass
+
+    @staticmethod
+    def _with_order(back: str) -> str:
+        """The hosted page keeps its own copy of the tile order; every trip through /go brings it the current one."""
+        if not any(back.startswith(o.rstrip("/") + "/") for o in CONFIG.get("launcher_origins", [])):
+            return back
+        return back.split("#")[0] + "#order=" + (",".join(APPS.order()) or "default")
 
     def _go(self):
         """GET /go?app=ID | ?source=ID | ?browse=URL | ?key=KEY, plus &back=URL. The https launcher navigates here, since it may
@@ -656,6 +677,11 @@ class Handler(SimpleHTTPRequestHandler):
             back = "/"
         error, text, wait = "", "", 7000
         try:
+            if "order" in query:
+                # From the hosted page, which may not call this helper but may navigate to it.
+                APPS.set_order([i for i in query["order"].split(",") if i] if query["order"] != "default" else None)
+                log("tile order " + ("reset" if query["order"] == "default" else "saved"))
+                wait = 300
             if query.get("takeover") in ("on", "off"):
                 set_takeover(query["takeover"] == "on")
                 log("home takeover switched " + query["takeover"])
@@ -686,7 +712,7 @@ class Handler(SimpleHTTPRequestHandler):
                 TV.send_key(query["key"])
                 log(f"sent {query['key']} via /go")
                 text, wait = "", 300
-            elif "takeover" not in query:
+            elif "takeover" not in query and "order" not in query:
                 error = "Unknown request."
         except Exception as e:
             log(f"/go failed: {e}")
@@ -696,7 +722,7 @@ class Handler(SimpleHTTPRequestHandler):
 <style>html,body{{margin:0;height:100%;background:#000;color:rgba(255,255,255,.7);font:300 40px sans-serif;
 display:flex;align-items:center;justify-content:center}}</style></head><body>{html.escape(error or text)}
 <script>
-var back = {json.dumps(back)};
+var back = {json.dumps(self._with_order(back))};
 // If an app or input took over, this page is hidden; if not (or it failed), go back to the launcher.
 setTimeout(function () {{ if (document.visibilityState === 'visible') location.replace(back); }}, {3000 if error else wait});
 </script></body></html>""".encode()
@@ -753,12 +779,16 @@ setTimeout(function () {{ if (document.visibilityState === 'visible') location.r
                 log(f"report from {self.client_address[0]}: {data.get('page', 'probe')}")
                 self._json(200, {"ok": True})
                 return
+            if path == "/api/order":
+                APPS.set_order(data.get("order") or None)
+                self._json(200, {"ok": True})
+                return
             if path == "/api/livetv/report":
                 LIVETV.report(str(data.get("url", "")), bool(data.get("ok")))
                 self._json(200, {"ok": True})
                 return
-            if path == "/api/yt/log":
-                log(f"YouTube page: {str(data.get('msg', ''))[:300]}")
+            if path in ("/api/yt/log", "/api/log"):
+                log(("YouTube page: " if path == "/api/yt/log" else "") + str(data.get("msg", ""))[:300])
                 self._json(200, {"ok": True})
                 return
             if path == "/api/refresh":

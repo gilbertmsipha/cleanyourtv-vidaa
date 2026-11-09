@@ -36,7 +36,7 @@ if (-not (Test-Path $py)) {
     }
 }
 if (-not (Test-Path "$dir\.venv\Scripts\python.exe")) { & $py -m venv "$dir\.venv" }
-& "$dir\.venv\Scripts\python.exe" -m pip install -q --disable-pip-version-check "paho-mqtt==2.1.0" yt-dlp yt-dlp-ejs truststore
+& "$dir\.venv\Scripts\python.exe" -m pip install -q --disable-pip-version-check "paho-mqtt==2.1.0" yt-dlp yt-dlp-ejs truststore requests
 $vpy = "$dir\.venv\Scripts\python.exe"
 
 Write-Host "2/6  TV pairing"

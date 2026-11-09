@@ -197,7 +197,13 @@ The **Live TV** tile (`cyt-tv`) plays the free channels collected by [iptv-org](
 
 - It starts on the last channel you watched. **Up/Down** change channel, **OK** shows what's on, **Back** opens the guide; in the guide **hold OK** to add a channel to Favourites, and **Back** from the categories leaves.
 - Rows: the countries in `livetv.countries` (default Zimbabwe and South Africa), then channels in `livetv.languages` (default `eng`) by category.
-- Streams are HLS, played with [hls.js](https://github.com/video-dev/hls.js) through the helper's `/proxy`, since channel servers rarely allow other sites. Many free channels are off air at any moment: the helper checks every channel daily and moves those that don't answer to the end of their list, dimmed.
+- Streams are HLS. The screen tries, smoothest first: the TV's own HLS player if it has one; [hls.js](https://github.com/video-dev/hls.js) fetching directly, for channel servers that allow other sites; hls.js through the helper's `/proxy`. It remembers what worked for each channel.
+- Through `/proxy` the helper keeps connections to channel servers open and fetches the newest segments ahead, so the TV's requests are answered from memory; the player keeps a ~30 s cushion a few segments behind live. That is what removed the 1-2 s pauses.
+- Many free channels are off air at any moment: the helper checks every channel daily and moves those that don't answer to the end of their list, dimmed.
+
+### Arranging tiles
+
+Hold **OK** on a tile and choose **Move**: the tile lifts, the arrows carry it (the first four places are the dock), **OK** puts it down and **Back** cancels. **Reset the order** in the same menu goes back to `dock` in `config.json`. The order is kept by the helper (`data/order.json`); the hosted page keeps a copy and gets the helper's on every trip through `/go`, so both show the same.
 
 ## Using it
 

@@ -220,6 +220,8 @@ class LiveTV:
         self.groups: list = []
         self.loaded = 0.0
         self.dead: dict = json.loads(self.dead_file.read_text(encoding="utf-8")) if self.dead_file.exists() else {}
+        self.cors_file = data / "livetv-cors.json"
+        self.cors: set = set(json.loads(self.cors_file.read_text(encoding="utf-8"))) if self.cors_file.exists() else set()
         if self.cache_file.exists():
             saved = json.loads(self.cache_file.read_text(encoding="utf-8"))
             self.groups, self.loaded = saved["groups"], saved["loaded"]
@@ -267,8 +269,8 @@ class LiveTV:
             else:
                 self.refresh()
         with self.lock:
-            return [{"name": g["name"], "channels": [dict(c, dead=self.dead.get(c["url"], 0) >= 2) for c in g["channels"]]}
-                    for g in self.groups]
+            return [{"name": g["name"], "channels": [dict(c, dead=self.dead.get(c["url"], 0) >= 2, direct=c["url"] in self.cors)
+                                                     for c in g["channels"]]} for g in self.groups]
 
     def sweep(self):
         """Check every channel once (its playlist answers, or not), so offline ones sink to the end before anyone
@@ -278,25 +280,24 @@ class LiveTV:
 
         def check(c):
             o = c.get("opts") or {}
-            try:
-                code, ctype, body = proxy_fetch(c["url"], o.get("http-referrer", ""), o.get("http-user-agent", ""), timeout=8)
-                if not isinstance(body, bytes):
-                    body.close()
-                return c["url"], True
-            except Exception:
-                return c["url"], False
+            ok, cors = probe(c["url"], o.get("http-referrer", ""), o.get("http-user-agent", ""))
+            return c["url"], ok, cors
 
+        session()       # fails here, before any channel is marked, if requests is missing
         t = time.time()
         with ThreadPoolExecutor(12) as pool:
             results = list(pool.map(check, chans.values()))
         with self.lock:
-            for url, ok in results:
+            for url, ok, cors in results:
                 if ok:
                     self.dead.pop(url, None)
                 else:
                     self.dead[url] = max(2, self.dead.get(url, 0))
+            self.cors = {url for url, ok, cors in results if cors}
             self.dead_file.write_text(json.dumps(self.dead), encoding="utf-8")
-        self.log(f"Live TV check: {sum(ok for _, ok in results)} of {len(results)} channels on air ({int(time.time() - t)} s)")
+            self.cors_file.write_text(json.dumps(sorted(self.cors)), encoding="utf-8")
+        self.log(f"Live TV check: {sum(r[1] for r in results)} of {len(results)} channels on air, "
+                 f"{len(self.cors)} playable directly ({int(time.time() - t)} s)")
 
     def sweeper(self):
         while True:
@@ -316,31 +317,179 @@ class LiveTV:
             self.dead_file.write_text(json.dumps(self.dead), encoding="utf-8")
 
 
-def proxy_fetch(url: str, referer: str = "", ua: str = "", timeout: float = 15) -> tuple[int, str, bytes | object]:
-    """Fetch a stream file for the page. Playlists are rewritten so every link inside comes back through /proxy too."""
-    headers = {"User-Agent": ua or UA}
+# One pooled HTTP session: channel servers keep the connection open, so each 2-6 s segment doesn't pay for a new
+# TCP + TLS handshake (that was a good part of the pauses).
+_session = None
+_session_lock = threading.Lock()
+
+
+def session():
+    global _session
+    with _session_lock:
+        if _session is None:
+            import requests  # comes with yt-dlp
+            _session = requests.Session()
+            adapter = requests.adapters.HTTPAdapter(pool_connections=32, pool_maxsize=32, max_retries=1)
+            _session.mount("http://", adapter)
+            _session.mount("https://", adapter)
+        return _session
+
+
+class SegmentCache:
+    """Recent stream segments in memory. When a playlist passes through, its newest segments are fetched ahead, so
+    the TV's next requests are answered from here at once instead of waiting on the channel's server."""
+
+    def __init__(self, max_bytes: int = 96 * 1024 * 1024, ttl: float = 180):
+        from collections import OrderedDict
+        self.items, self.size, self.max, self.ttl = OrderedDict(), 0, max_bytes, ttl
+        self.inflight = {}
+        self.lock = threading.Lock()
+
+    def get(self, url: str):
+        with self.lock:
+            hit = self.items.get(url)
+            if hit and time.time() - hit[0] < self.ttl:
+                self.items.move_to_end(url)
+                return hit[1], hit[2]
+        return None
+
+    def put(self, url: str, ctype: str, body: bytes):
+        with self.lock:
+            if url in self.items:
+                self.size -= len(self.items.pop(url)[2])
+            self.items[url] = (time.time(), ctype, body)
+            self.size += len(body)
+            while self.size > self.max and self.items:
+                self.size -= len(self.items.popitem(last=False)[1][2])
+
+    def claim(self, url: str):
+        """None if this caller should fetch; otherwise the event to wait on for another caller's fetch."""
+        with self.lock:
+            ev = self.inflight.get(url)
+            if ev:
+                return ev
+            self.inflight[url] = threading.Event()
+            return None
+
+    def release(self, url: str):
+        with self.lock:
+            ev = self.inflight.pop(url, None)
+        if ev:
+            ev.set()
+
+
+SEGMENTS = SegmentCache()
+PREFETCH = 6   # segments fetched ahead from each live playlist
+
+
+def _headers(referer: str, ua: str) -> dict:
+    h = {"User-Agent": ua or UA}
     if referer:
-        headers["Referer"] = referer
-    req = urllib.request.Request(url, headers=headers)
-    r = urllib.request.urlopen(req, timeout=timeout)
-    ctype = r.headers.get_content_type()
-    final = r.geturl()
-    if "mpegurl" in ctype or final.split("?")[0].endswith(".m3u8") or url.split("?")[0].endswith(".m3u8"):
-        text = r.read().decode("utf-8", "replace")
-        r.close()
+        h["Referer"] = referer
+    return h
+
+
+def _fetch_segment(url: str, headers: dict, timeout: float):
+    """A segment, from the cache, from a fetch already under way, or fetched now. Returns (ctype, bytes)."""
+    for _ in range(2):
+        hit = SEGMENTS.get(url)
+        if hit:
+            return hit
+        ev = SEGMENTS.claim(url)
+        if ev is None:
+            break
+        ev.wait(timeout)
+    else:
+        hit = SEGMENTS.get(url)
+        if hit:
+            return hit
+        SEGMENTS.claim(url)
+    try:
+        r = session().get(url, headers=headers, timeout=timeout)
+        r.raise_for_status()
+        out = (r.headers.get("Content-Type", "video/mp2t").split(";")[0], r.content)
+        SEGMENTS.put(url, *out)
+        return out
+    finally:
+        SEGMENTS.release(url)
+
+
+def _prefetch(urls: list, headers: dict):
+    for u in urls:
+        if SEGMENTS.get(u) is None:
+            threading.Thread(target=_safe, args=(_fetch_segment, u, headers, 20), daemon=True).start()
+
+
+def _safe(fn, *a):
+    try:
+        fn(*a)
+    except Exception:
+        pass
+
+
+def proxy_fetch(url: str, referer: str = "", ua: str = "", timeout: float = 15):
+    """Fetch a stream file for the page: (status, content type, bytes or an iterator of chunks).
+    Playlists are rewritten so every link inside comes back through /proxy; segments are cached and prefetched."""
+    headers = _headers(referer, ua)
+    hit = SEGMENTS.get(url)
+    if hit:
+        return 200, hit[0], hit[1]
+    if SEGMENTS.inflight.get(url):          # being prefetched right now: wait for it rather than fetch twice
+        ctype, body = _fetch_segment(url, headers, timeout)
+        return 200, ctype, body
+    r = session().get(url, headers=headers, timeout=timeout, stream=True)
+    r.raise_for_status()
+    ctype = r.headers.get("Content-Type", "").split(";")[0].strip().lower()
+    final = r.url
+    if "mpegurl" in ctype or final.split("?")[0].lower().endswith(".m3u8") or url.split("?")[0].lower().endswith(".m3u8"):
+        text = r.content.decode("utf-8", "replace")
         extra = (f"&ref={quote(referer, safe='')}" if referer else "") + (f"&ua={quote(ua, safe='')}" if ua else "")
+        segs = []
 
-        def wrap(u: str) -> str:
-            return "/proxy?u=" + quote(urljoin(final, u), safe="") + extra
+        def wrap(u: str, seg: bool = False) -> str:
+            full = urljoin(final, u)
+            if seg:
+                segs.append(full)
+            return "/proxy?u=" + quote(full, safe="") + extra
 
-        lines = []
+        lines, after_inf = [], False
         for line in text.splitlines():
             s = line.strip()
             if s and not s.startswith("#"):
-                lines.append(wrap(s))
+                lines.append(wrap(s, after_inf and ".m3u8" not in s.lower()))
+                after_inf = False
             elif 'URI="' in s:
                 lines.append(re.sub(r'URI="([^"]+)"', lambda m: 'URI="' + wrap(m.group(1)) + '"', line))
             else:
+                after_inf = after_inf or s.startswith("#EXTINF")
                 lines.append(line)
+        if segs:
+            _prefetch(segs[-PREFETCH:], headers)
         return 200, "application/vnd.apple.mpegurl", "\n".join(lines).encode()
-    return 200, ctype, r
+    size = int(r.headers.get("Content-Length") or 0)
+    if 0 < size <= 32 * 1024 * 1024:
+        body = r.content
+        SEGMENTS.put(url, ctype or "video/mp2t", body)
+        return 200, ctype or "video/mp2t", body
+
+    def chunks():  # an endless stream (some channels are plain MPEG-TS or audio): pass it on as it comes
+        try:
+            for b in r.iter_content(65536):
+                yield b
+        finally:
+            r.close()
+    return 200, ctype or "application/octet-stream", chunks()
+
+
+def probe(url: str, referer: str = "", ua: str = "", timeout: float = 8):
+    """(answers, allows other sites): whether a channel's playlist loads, and whether its server sends CORS headers,
+    in which case the TV can fetch it directly instead of through this computer."""
+    s = session()   # an ImportError here is ours, not the channel's: let it stop the check
+    try:
+        r = s.get(url, headers=_headers(referer, ua), timeout=timeout, stream=True)
+        ok = r.status_code < 400
+        cors = r.headers.get("Access-Control-Allow-Origin", "") == "*"
+        r.close()
+        return ok, ok and cors
+    except Exception:
+        return False, False
