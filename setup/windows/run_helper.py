@@ -17,10 +17,14 @@ LOG.parent.mkdir(exist_ok=True)
 if PID.exists():
     old = PID.read_text().strip()
     if old.isdigit():
-        found = subprocess.run(["powershell", "-NoProfile", "-Command",
-                                f"(Get-CimInstance Win32_Process -Filter 'ProcessId={old}').CommandLine"],
-                               capture_output=True, text=True).stdout
-        if "run_helper.py" in found:
+        # tasklist, not PowerShell's Get-CimInstance: WMI can take minutes to answer right after boot, which held
+        # the helper back for as long. A python.exe under the pid we saved is the old helper.
+        try:
+            found = subprocess.run(["tasklist", "/FI", f"PID eq {old}", "/FO", "CSV", "/NH"],
+                                   capture_output=True, text=True, timeout=30).stdout.lower()
+        except subprocess.TimeoutExpired:
+            found = ""
+        if f'"{old}"' in found and "python" in found and int(old) != os.getpid():
             subprocess.run(["taskkill", "/F", "/PID", old], capture_output=True)
 PID.write_text(str(os.getpid()))
 if LOG.exists() and LOG.stat().st_size > 1_000_000:
