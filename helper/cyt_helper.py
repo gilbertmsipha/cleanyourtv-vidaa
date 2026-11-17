@@ -160,13 +160,14 @@ class TvLink:
         return apps
 
 
-def rediscover_tv() -> bool:
+def rediscover_tv(quiet: bool = False) -> bool:
     """Find the TV again on the network by its name and save its new address in the pairing."""
     name = CONFIG.get("tv_name", "")
     try:
         found = client.discover(timeout=4)
     except Exception as e:
-        log(f"discovery failed: {e}")
+        if not quiet:
+            log(f"discovery failed: {e}")
         return False
     for tv in found:
         if tv.is_vidaa and (not name or tv.friendly_name == name):
@@ -176,7 +177,8 @@ def rediscover_tv() -> bool:
                 session.host = tv.host
                 session.save()
             return True
-    log("the TV was not found on the network")
+    if not quiet:
+        log("the TV was not found on the network")
     return False
 
 
@@ -846,6 +848,17 @@ DIAL_APPS = {"Netflix": None, "AmazonInstantVideo": None, "YouTube": "https://ww
 APP_DIAL_NAMES = {"1": "Netflix", "2": "AmazonInstantVideo", "3": "YouTube"}
 
 
+def uptime_seconds() -> float:
+    """How long this computer has been on."""
+    try:
+        if os.name == "nt":
+            import ctypes
+            return ctypes.windll.kernel32.GetTickCount64() / 1000
+        return float(Path("/proc/uptime").read_text().split()[0])
+    except Exception:
+        return float("inf")
+
+
 class HomeWatch(threading.Thread):
     """VIDAA has no setting for another home screen, and on this firmware it does not answer a "what is on screen"
     query. It does say when it comes on (its remote port answers again) and, over DIAL, whether Netflix, YouTube or
@@ -863,6 +876,12 @@ class HomeWatch(threading.Thread):
         self.dial = (None, None)   # (TV host, DIAL apps URL)
         self.open_apps: set = set()
         self.starting: dict = {}    # app -> until when it counts as open while it starts
+        # Bring-up: whenever the TV is (found) on, connect, reload the app list and open the launcher, retrying
+        # until all of it worked. Pending until then, also across short drop-outs.
+        self.bringup = None         # None, or why the launcher should open ("the TV was switched on")
+        self.bringup_at = 0.0
+        self.bringup_tries = 0
+        self.last_rediscover = 0.0
 
     def dial_base(self, host: str) -> str:
         if self.dial[0] != host:
@@ -934,23 +953,53 @@ class HomeWatch(threading.Thread):
                 TV.close()
             time.sleep(0.3)
 
+    def bring_up(self, host: str):
+        """One try at the whole connection; on failure the next try is scheduled, a few seconds later each time."""
+        try:
+            with TV.lock:
+                TV._connect()
+            APPS.refresh()
+            self.open_apps = self.ask(host, ["Netflix"])
+            # A helper restart (the nightly yt-dlp update) must not cover what is on screen; a fresh boot of this
+            # computer (a power cut took both down) should show the launcher like the TV coming on.
+            fresh = self.bringup != "the helper started with the TV on" or uptime_seconds() < 20 * 60
+            if CONFIG.get("takeover_on_power_on", True) and fresh and not self.open_apps:
+                self.open_launcher(self.bringup)
+        except Exception as e:
+            self.bringup_tries += 1
+            if self.bringup_tries == 1 or self.bringup_tries % 20 == 0:
+                log(f"the TV is on but the connection failed ({e}); retrying until it works (try {self.bringup_tries})")
+            TV.close()
+            self.bringup_at = time.time() + min(15, 2 + self.bringup_tries)
+            return
+        if self.bringup_tries:
+            log(f"connected after {self.bringup_tries + 1} tries")
+        self.bringup, self.bringup_tries = None, 0
+
     def step(self, warm_now: bool):
         host = client.Session.load().host
         if not self.tv_up(host):
             if self.up is not False:
                 self.down_since = time.time()
             self.up, self.open_apps = False, set()
+            # Not at its saved address: off, or the router gave it a new one. Look for it now and then.
+            if time.time() - self.last_rediscover > 120:
+                self.last_rediscover = time.time()
+                rediscover_tv(quiet=True)
             return
-        if self.up is False and time.time() - self.down_since > 20:
-            # Back after a real absence (not a Wi-Fi blip): the TV was switched on.
+        if self.up is None or (self.up is False and time.time() - self.down_since > 20):
+            # First seen since the helper started, or back after a real absence (not a Wi-Fi blip): switched on.
+            self.bringup = "the TV was switched on" if self.up is False else "the helper started with the TV on"
+            self.bringup_tries = 0
+            self.bringup_at = time.time() + (CONFIG.get("power_on_delay_seconds", 5) if self.up is False else 0)
             self.up = True
             threading.Thread(target=self.warm, daemon=True).start()
-            time.sleep(CONFIG.get("power_on_delay_seconds", 5))
-            self.open_apps = self.ask(host, ["Netflix"])
-            if CONFIG.get("takeover_on_power_on", True) and not self.open_apps:
-                self.open_launcher("the TV was switched on")
             return
         self.up = True
+        if self.bringup:
+            if time.time() >= self.bringup_at:
+                self.bring_up(host)
+            return
         if warm_now:
             threading.Thread(target=self.warm, daemon=True).start()
         if not self.open_apps:
@@ -998,10 +1047,8 @@ def keep_ytdlp_fresh():
 
 
 def main():
-    try:
-        APPS.refresh()
-    except Exception as e:
-        log(f"could not reach the TV yet ({e}); using the cached app list ({len(APPS.apps)} apps)")
+    # The TV connection and app list come from the home watch, which retries them for as long as the TV is on.
+    log(f"starting; {len(APPS.apps)} apps in the cached list until the TV answers")
     try:
         check_own_address()
     except Exception as e:
